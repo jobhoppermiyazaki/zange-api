@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>zange - お題</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <h1><a href="index.html" style="text-decoration:none; color:inherit;">zange</a></h1>
+      <span id="currentUserIcon"></span>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <p class="muted">気になるお題の「🙏」を押すと、投稿画面にそのお題がセットされます。</p>
+    </section>
+
+    <section id="topicList"></section>
+  </main>
+
+  <!-- フッター（共通） -->
+  <footer class="mobile-tabbar">
+    <nav>
+      <a href="index.html">
+        <span class="icon">🏠</span>
+        <span class="label">ホーム</span>
+      </a>
+      <a href="topics.html">
+        <span class="icon">🎯</span>
+        <span class="label">お題</span>
+      </a>
+      <a href="notifications.html" class="nav-link nav-bell">
+        <span class="icon-row">
+          <span class="icon">🔔</span>
+          <span id="notifBadge" class="notif-badge" aria-label="未読通知数"></span>
+        </span>
+        <span class="label">通知</span>
+      </a>
+      <a href="settings.html">
+        <span class="icon">⚙️</span>
+        <span class="label">設定</span>
+      </a>
+      <a href="about.html">
+        <span class="icon">📕</span>
+        <span class="label">概要</span>
+      </a>
+    </nav>
+  </footer>
+  <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
+
+  <script src="script.js"></script>
+  <script>
+    // ページ本体の一覧を表示（getTodayTopics が無い場合のフォールバック付き）
+    (function renderTopicList(){
+      const mount = document.getElementById('topicList');
+      if (!mount) return;
+
+      const fallback = [
+        "つい買ってしまったもの",
+        "パートナーに言えなかったこと",
+        "仕事でやらかした小さな失敗",
+        "食欲に負けた瞬間",
+        "お金の使いすぎ反省"
+      ];
+      const topics = (typeof getTodayTopics === 'function') ? getTodayTopics() : fallback;
+
+      topics.forEach(t => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+            <div style="font-weight:800;">#${t}</div>
+            <a class="t-post" href="post.html?topic=${encodeURIComponent(t)}" aria-label="${t} に投稿">🙏 投稿</a>
+          </div>
+        `;
+        mount.appendChild(card);
+      });
+    })();
+  </script>
+
+  <footer>
+    &copy; 2025 zange (テスト公開中)
+  </footer>
+</body>
+</html>
