@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>zange - マイページ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- Render の同一オリジン API を最優先に使う -->
+  <script>
+    // 同一オリジン（Render）を最優先に。必要なら script.js 側でこの変数を参照します
+    window.ZANGE_API_BASE = location.origin.replace(/\/+$/, '') + '/api/posts';
+  </script>
+
+  <style>
+    /* --- Settings page quick styles --- */
+    .section-title{font-weight:800;font-size:18px;margin:8px 0 6px;}
+    .card.form{padding:14px}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .avatar{
+      width:84px;height:84px;border-radius:50%;object-fit:cover;border:2px solid var(--panel-border,#eee);
+      background:#f6f6f6;display:block
+    }
+    .avatar-wrap{display:flex;flex-direction:column;gap:6px;align-items:center}
+    .field{display:flex;flex-direction:column;gap:6px;flex:1;min-width:140px}
+    .field input[type="text"], .field input[type="number"], .field textarea, .field select{width:100%}
+    .btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+    .btn{padding:8px 12px;border-radius:10px;border:1px solid #e6e6e6;background:#fff;box-shadow:var(--shadow);cursor:pointer}
+    .btn.danger{background:#ffecec;border-color:#ffc9c9}
+    .btn.primary{background:#111;color:#fff;border-color:#111}
+    .right{margin-left:auto}
+    .muted{color:#8a8a8a}
+    .pill{padding:6px 10px;border-radius:999px;background:#f1f5f9}
+
+    /* 自分の投稿：編集エリアは初期で非表示。編集時のみ表示 */
+    .my-post .edit-area{margin-top:8px;display:none !important;}
+    .my-post.editing .edit-area{display:block !important;}
+
+    /* プロフィール表示/編集の切替用（script.js が使う要素） */
+    #profileView p{margin:2px 0}
+    #profileView .name{font-weight:700;font-size:16px}
+    #profileView .meta{font-size:13px;color:#6b7280}
+    #profileView .bio{margin-top:4px}
+
+    /* ---- Follow posts modal ---- */
+    .follow-posts-modal{
+      position:fixed; inset:0; display:none; z-index:9999;
+      background:rgba(0,0,0,.35); padding:16px;
+      align-items:flex-end; justify-content:center;
+    }
+    .follow-posts-modal .sheet{
+      width:100%; max-width:720px; max-height:80vh; overflow:auto;
+      background:#fff; border-radius:16px; padding:12px; box-shadow:0 10px 30px rgba(0,0,0,.25);
+    }
+    .follow-posts-modal .sheet .head{
+      display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;
+    }
+    .follow-posts-modal .close-btn{ padding:8px 12px; border:1px solid #eee; border-radius:10px; background:#fff; }
+    .follow-link{ border:none; background:none; padding:0; font:inherit; color:inherit; text-align:left; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <header>
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <h1><a href="index.html" style="text-decoration:none; color:inherit;">zange</a></h1>
+      <span id="currentUserIcon"></span>
+    </div>
+  </header>
+
+  <main style="padding-bottom:90px">
+    <!-- 自分のプロフィール（表示モード＋編集モード） -->
+    <div class="card form">
+
+      <!-- 表示モード -->
+      <div id="profileView">
+        <div class="row">
+          <div class="avatar-wrap">
+            <!-- 画像フォールバック（default-avatar.png が無い場合は埋め込みSVGを使用） -->
+            <img id="profileAvatarShow" class="avatar" src="images/default-avatar.png" alt="avatar"
+                 onerror="this.onerror=null;this.src='data:image/svg+xml;utf8,<?xml version=&quot;1.0&quot;?><svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;84&quot; height=&quot;84&quot; viewBox=&quot;0 0 84 84&quot;><circle cx=&quot;42&quot; cy=&quot;42&quot; r=&quot;42&quot; fill=&quot;%23f1f5f9&quot;/><circle cx=&quot;42&quot; cy=&quot;34&quot; r=&quot;14&quot; fill=&quot;%23cbd5e1&quot;/><rect x=&quot;16&quot; y=&quot;52&quot; width=&quot;52&quot; height=&quot;20&quot; rx=&quot;10&quot; fill=&quot;%23cbd5e1&quot;/></svg>';">
+          </div>
+          <div class="field" style="min-width:180px;flex:2">
+            <p id="profileNameShow" class="name">匿名</p>
+            <p id="profileGenderShow" class="meta">性別: —</p>
+            <p id="profileAgeShow" class="meta">年齢: —</p>
+            <p id="profileBioShow" class="bio">自己紹介: —</p>
+          </div>
+          <div class="right">
+            <button id="editProfileBtn" class="btn">編集</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 編集モード（初期は非表示） -->
+      <div id="profileEdit" style="display:none;">
+        <div class="row">
+          <div class="avatar-wrap">
+            <img id="profileAvatarPreview" class="avatar" src="images/default-avatar.png" alt="avatar"
+                 onerror="this.onerror=null;this.src='data:image/svg+xml;utf8,<?xml version=&quot;1.0&quot;?><svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;84&quot; height=&quot;84&quot; viewBox=&quot;0 0 84 84&quot;><circle cx=&quot;42&quot; cy=&quot;42&quot; r=&quot;42&quot; fill=&quot;%23f1f5f9&quot;/><circle cx=&quot;42&quot; cy=&quot;34&quot; r=&quot;14&quot; fill=&quot;%23cbd5e1&quot;/><rect x=&quot;16&quot; y=&quot;52&quot; width=&quot;52&quot; height=&quot;20&quot; rx=&quot;10&quot; fill=&quot;%23cbd5e1&quot;/></svg>';">
+            <label class="btn">
+              プロフィール画像設定
+              <input id="profileAvatarInput" type="file" accept="image/*" style="display:none">
+            </label>
+          </div>
+          <div class="field">
+            <label>ニックネーム</label>
+            <input id="profileNickname" type="text" placeholder="例）zange太郎">
+          </div>
+          <div class="field" style="max-width:140px">
+            <label>性別</label>
+            <select id="profileGender">
+              <option value="">未選択</option>
+              <option>男性</option>
+              <option>女性</option>
+              <option>その他</option>
+              <option>回答しない</option>
+            </select>
+          </div>
+          <div class="field" style="max-width:140px">
+            <label>年齢</label>
+            <select id="profileAge">
+              <option value="">未選択</option>
+              <option>〜19</option><option>20-24</option><option>25-29</option>
+              <option>30-34</option><option>35-39</option><option>40-44</option>
+              <option>45-49</option><option>50-59</option><option>60+</option>
+            </select>
+          </div>
+          <div class="field" style="flex-basis:100%">
+            <label>プロフィール</label>
+            <textarea id="profileBio" rows="3" placeholder="ひとこと自己紹介"></textarea>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button id="profileSaveBtn" class="btn primary">保存</button>
+          <button id="profileCancelBtn" class="btn">キャンセル</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- フォロー・フォロワー -->
+    <section class="card">
+      <div class="follow-tabs">
+        <div class="tabbar" role="tablist" aria-label="follow tabs">
+          <button id="tab-followers" class="tab2" role="tab"
+                  aria-selected="false" aria-controls="pane-followers">フォロワー</button>
+          <button id="tab-following" class="tab2 active" role="tab"
+                  aria-selected="true" aria-controls="pane-following">フォロー中</button>
+          <span class="tab-underline" aria-hidden="true"></span>
+        </div>
+
+        <div id="followStats" class="follow-stats under"></div>
+
+        <div id="pane-following" class="tabpanel show" role="tabpanel" aria-labelledby="tab-following">
+          <div id="followingList"></div>
+        </div>
+
+        <div id="pane-followers" class="tabpanel" role="tabpanel" aria-labelledby="tab-followers" hidden>
+          <div id="followersList"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 自分の投稿 -->
+    <div class="card form" style="margin-top:16px">
+      <div class="section-title">自分の投稿</div>
+      <div class="my-posts-toolbar">
+        <input id="myPostsSearch"
+               type="search"
+               inputmode="search"
+               placeholder="自分の投稿を検索（本文・対象・タグ）">
+      </div>
+      <div id="myPostsList"></div>
+    </div>
+
+    <!-- ▼ フォロー中ユーザーの投稿一覧モーダル ▼ -->
+    <div id="followPostsModal" class="follow-posts-modal">
+      <div class="sheet card">
+        <div class="head">
+          <strong id="followPostsTitle">ユーザーの投稿</strong>
+          <button id="followPostsClose" class="close-btn">閉じる</button>
+        </div>
+        <div id="followPostsList"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 既存フッター -->
+  <footer class="mobile-tabbar">
+    <nav>
+      <a href="index.html"><span class="icon">🏠</span><span class="label">ホーム</span></a>
+      <a href="topics.html"><span class="icon">🎯</span><span class="label">お題</span></a>
+      <a href="notifications.html" class="nav-link nav-bell">
+        <span class="icon-row"><span class="icon">🔔</span><span id="notifBadge" class="notif-badge" aria-label="未読通知数"></span></span>
+        <span class="label">通知</span>
+      </a>
+      <a href="settings.html"><span class="icon">⚙️</span><span class="label">設定</span></a>
+      <a href="about.html"><span class="icon">📕</span><span class="label">概要</span></a>
+    </nav>
+  </footer>
+
+  <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
+
+  <script src="script.js"></script>
+
+  <footer>&copy; 2025 zange (テスト公開中)</footer>
+</body>
+</html>
