@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <!-- APIベースURLを Render 環境に合わせて動的に決定 -->
+  <script>
+    // Render の公開URLから呼ぶ場合は location.origin を利用
+    // 例: https://zange-api.onrender.com/api/posts
+    window.ZANGE_API_BASE = location.origin.replace(/\/+$/, '') + "/api/posts";
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta charset="UTF-8">
+  <title>zange- タイムライン</title>
+  <link rel="stylesheet" href="style.css">
+  <meta name="color-scheme" content="light">
+</head>
+<body>
+  <header>
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <h1><a href="index.html" style="text-decoration:none; color:inherit;">zange</a></h1>
+      <span id="currentUserIcon"></span>
+    </div>
+  </header>
+
+  <section class="tutorial-section">
+    <div class="tutorial-link card">
+      <a href="about.html">📕 はじめての方はこちら</a>
+    </div>
+  </section>
+
+  <div class="topics-strip">
+    <div id="todayTopics" class="topics-row"></div>
+  </div>
+
+  <script>
+    (function renderTopics(){
+      const topics = ["つい買ってしまったもの","パートナーに言えなかったこと","仕事でやらかした小さな失敗","食欲に負けた瞬間","お金の使いすぎ反省"];
+      const host = document.getElementById('todayTopics');
+      host.innerHTML = '';
+      topics.forEach(t => {
+        const chip = document.createElement('div');
+        chip.className = 'topic-chip';
+        chip.innerHTML = `
+          <span class="t-label">#${t}</span>
+          <a class="t-post" href="post.html?topic=${encodeURIComponent(t)}">🙏</a>
+        `;
+        host.appendChild(chip);
+      });
+    })();
+  </script>
+
+  <main class="container">
+    <section class="card">
+      <input type="text" placeholder="キーワードでさがす（本文・対象・タグ）" />
+    </section>
+    <section id="timeline"></section>
+  </main>
+
+  <!-- 既存スクリプト（あってOK。下の描画が最後に上書きする） -->
+  <script src="script.js"></script>
+
+  <!-- 状態表示（必要ならCSSで消してOK） -->
+  <div id="apiStatus" style="position:sticky;top:0;z-index:9;font:12px/1.4 system-ui;background:#e7f5ff;border:1px solid #a5d8ff;padding:6px 8px;display:none"></div>
+
+  <script>
+    // ===== ユーティリティ =====
+    const API_BASES = [
+      window.ZANGE_API_BASE,                                      // ★ 固定の公開API（最優先）
+      location.origin.replace(/\/+$/,'') + '/api/posts',
+      'api/posts',
+      '/api/posts'
+    ].filter(Boolean);
+
+    async function tryFetchJson(url, init){
+      const u = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now(); // キャッシュ殺し
+      const res = await fetch(u, Object.assign({ cache:'no-store', credentials:'same-origin' }, init||{}));
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    }
+
+    async function fetchJsonWithFallback(urls, init){
+      let last;
+      for (const u of urls){
+        try { return await tryFetchJson(u, init); } catch(e){ last = e; }
+      }
+      throw last || new Error('fetch fail');
+    }
+
+    // ===== APIクライアント =====
+    const API = {
+      async list(){
+        const list = await fetchJsonWithFallback(API_BASES, { method:'GET' });
+        list.sort((a,b)=> String(b.createdAt||b.created_at||b.date||'').localeCompare(String(a.createdAt||a.created_at||a.date||'')));
+        return list;
+      },
+      async add(post){
+        const payload = { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(post) };
+        return await fetchJsonWithFallback(API_BASES, payload);
+      }
+    };
+
+    // ===== localStorage 互換 =====
+    function readLocal(){
+      try{
+        const arr = JSON.parse(localStorage.getItem('zange_posts') || '[]');
+        if (!Array.isArray(arr)) return [];
+        arr.sort((a,b)=> String(b.createdAt||b.created_at||b.date||'').localeCompare(String(a.createdAt||a.created_at||a.date||'')));
+        return arr;
+      }catch{ return []; }
+    }
+
+    async function migrateLocalToServerOnceIfNeeded(serverPosts){
+      try{
+        if ((serverPosts?.length||0) > 0) return;
+        if (localStorage.getItem('zange_migrated') === '1') return;
+        const local = readLocal();
+        if (local.length === 0) return;
+        for (const p of local){
+          await API.add({ text: p.text || p.body || p.content || "", author: p.author || p.user || "" });
+        }
+        localStorage.setItem('zange_migrated','1');
+      }catch(e){ console.warn('migrate skipped:', e.message); }
+    }
+
+    // ===== 描画 =====
+    function render(posts){
+      const wrap = document.getElementById('timeline');
+      if (!wrap) return;
+      wrap.innerHTML = '';
+      posts.forEach(p=>{
+        const text = escapeHTML(p.text || p.body || p.content || '');
+        const author = escapeHTML(p.author || p.user || '匿名');
+        const when = formatDate(p.createdAt || p.created_at || p.date);
+        const card = document.createElement('article');
+        card.className = 'card zange-post';
+        card.innerHTML = `
+          <div class="post-body">${text.replace(/\n/g,'<br>')}</div>
+          <div class="post-meta">
+            <span class="post-author">by ${author}</span>
+            ${when ? `<span class="post-date">・${when}</span>` : ''}
+            <button class="post-stamp-btn" type="button" data-id="${p.id || ''}" aria-label="スタンプする">👏</button>
+          </div>
+        `;
+        wrap.appendChild(card);
+      });
+
+      // 他スクリプトに削られても復元（軽量）
+      const mo = new MutationObserver(()=> {
+        if (!document.getElementById('timeline')?.children.length){
+          render(posts);
+        }
+      });
+      mo.observe(document.getElementById('timeline'), { childList:true });
+    }
+
+    // ===== メイン処理（最後に強制上書き）=====
+    async function refresh(){
+      let posts = [];
+      try{
+        posts = await API.list();
+        showApiStatus(`API OK：${posts.length}件取得`, true);
+
+        // サーバが空ならローカルを一度だけ移行
+        await migrateLocalToServerOnceIfNeeded(posts);
+
+        // 念のため再取得
+        posts = await API.list();
+
+        // サーバ結果があるときだけローカルへ同期（空で上書きしない）
+        if (posts.length > 0){
+          try{ localStorage.setItem('zange_posts', JSON.stringify(posts)); }catch{}
+        }
+      }catch(e){
+        showApiStatus(`API NG（${e?.message || 'エラー'}）。localStorageにフォールバック中…`);
+        posts = readLocal();
+      }
+      render(posts);
+    }
+
+    // DOM 準備後＆他スクリプト実行後に“最後に”上書き
+    window.addEventListener('load', async ()=>{
+      await refresh();
+      setInterval(refresh, 8000);
+    });
+  </script>
+
+  <footer class="mobile-tabbar">
+    <nav>
+      <a href="index.html"><span class="icon">🏠</span><span class="label">ホーム</span></a>
+      <a href="topics.html"><span class="icon">🎯</span><span class="label">お題</span></a>
+      <a href="notifications.html" class="nav-link nav-bell">
+        <span class="icon-row"><span class="icon">🔔</span><span id="notifBadge" class="notif-badge" aria-label="未読通知数"></span></span>
+        <span class="label">通知</span>
+      </a>
+      <a href="settings.html"><span class="icon">⚙️</span><span class="label">設定</span></a>
+      <a href="about.html"><span class="icon">📕</span><span class="label">概要</span></a>
+    </nav>
+  </footer>
+
+  <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
+
+  <footer>&copy; 2025 zange (テスト公開中)</footer>
+
+  <div id="stampModalBackdrop" class="stamp-modal-backdrop" aria-hidden="true">
+    <div class="stamp-modal" role="dialog" aria-modal="true" aria-labelledby="stampModalTitle">
+      <h3 id="stampModalTitle">スタンプを選ぶ</h3>
+      <div id="stampGrid" class="stamp-grid"></div>
+      <div class="row-end"><button type="button" class="btn-close" onclick="closeStampPicker()">閉じる</button></div>
+    </div>
+  </div>
+</body>
+</html>
