@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <!-- RenderのAPIを使う -->
+  <script>window.ZANGE_API_BASE = "https://zange-api.onrender.com/api/posts";</script>
+  <meta charset="UTF-8" />
+  <title>zange - 投稿する</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .bg-picker { display:flex; flex-wrap:wrap; gap:12px; }
+    .bg-thumb{
+      width:96px; height:96px; border-radius:14px;
+      border:2px solid #eee; background:#fff center/cover no-repeat;
+      display:inline-flex; align-items:center; justify-content:center;
+      box-shadow:0 1px 4px rgba(0,0,0,.06); cursor:pointer;
+    }
+    .bg-thumb.selected{ border-color:#f59e0b; box-shadow:0 0 0 3px rgba(245,158,11,.2); }
+    .bg-thumb.bg-none{
+      font-weight:700; color:#6b7280;
+      background:repeating-linear-gradient(45deg,#f9fafb,#f9fafb 10px,#f3f4f6 10px,#f3f4f6 20px);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <h1><a href="index.html" style="text-decoration:none; color:inherit;">zange</a></h1>
+      <span id="currentUserIcon"></span>
+    </div>
+  </header>
+
+  <main>
+    <form id="postForm">
+      <label>投稿内容</label>
+      <textarea id="zangeText" rows="4" placeholder="例）帰宅はバスって言ったけど、実はタクシー使っちゃった…"></textarea>
+
+      <label>誰に（必須）</label>
+      <select id="zangeTargetFixed">
+        <option value="" selected>選択してください</option>
+        <option value="自分">自分</option>
+        <option value="親友">親友</option>
+        <option value="友達">友達</option>
+        <option value="彼女・彼氏">彼女・彼氏</option>
+        <option value="妻">妻</option>
+        <option value="夫">夫</option>
+        <option value="パートナー">パートナー</option>
+        <option value="父">父</option>
+        <option value="母">母</option>
+        <option value="祖父母">祖父母</option>
+        <option value="先生">先生</option>
+        <option value="上司">上司</option>
+        <option value="先輩">先輩</option>
+        <option value="後輩">後輩</option>
+        <option value="部下">部下</option>
+      </select>
+
+      <label>タグ（任意）</label>
+      <input type="text" id="futureTag" placeholder="例）#節約します / #明日は我慢する">
+
+      <label>背景画像を選択</label>
+      <input type="hidden" id="zangeBg" value="">
+      <div class="bg-picker" id="bgPicker">
+        <!-- なし（初期選択扱い） -->
+        <button type="button" class="bg-thumb bg-none selected" data-bg="" aria-label="背景なし">なし</button>
+
+        <!-- 既存 -->
+        <button type="button" class="bg-thumb" data-bg="bg1.jpg" style="background-image:url('images/bg1.jpg')" aria-label="背景1"></button>
+        <button type="button" class="bg-thumb" data-bg="bg2.jpg" style="background-image:url('images/bg2.jpg')" aria-label="背景2"></button>
+        <button type="button" class="bg-thumb" data-bg="bg3.jpg" style="background-image:url('images/bg3.jpg')" aria-label="背景3"></button>
+        <button type="button" class="bg-thumb" data-bg="bg4.jpg" style="background-image:url('images/bg4.jpg')" aria-label="背景4"></button>
+        <button type="button" class="bg-thumb" data-bg="bg5.jpg" style="background-image:url('images/bg5.jpg')" aria-label="背景5"></button>
+
+        <!-- 追加 -->
+        <button type="button" class="bg-thumb" data-bg="bg6.jpg" style="background-image:url('images/bg6.jpg')" aria-label="背景6"></button>
+        <button type="button" class="bg-thumb" data-bg="bg7.jpg" style="background-image:url('images/bg7.jpg')" aria-label="背景7"></button>
+        <button type="button" class="bg-thumb" data-bg="bg8.jpg" style="background-image:url('images/bg8.jpg')" aria-label="背景8"></button>
+      </div>
+
+      <label>公開範囲</label>
+      <div style="display:flex; gap:12px; align-items:center;">
+        <label><input type="radio" name="scope" value="public" checked> 全体公開</label>
+        <label><input type="radio" name="scope" value="private"> 非公開（自分のみ）</label>
+      </div>
+
+      <div style="margin-top:14px;">
+        <button id="submitBtn" type="submit">投稿する</button>
+      </div>
+    </form>
+  </main>
+
+  <script>
+    // ====== エンドポイント配列（固定URL→絶対→相対→ルート） ======
+    const API_ENDPOINTS = [
+      window.ZANGE_API_BASE,
+      location.origin.replace(/\/+$/,'') + '/api/posts',
+      'api/posts',
+      '/api/posts'
+    ].filter(Boolean);
+
+    async function postJsonWithFallback(data){
+      let lastErr;
+      for (const url of API_ENDPOINTS){
+        try{
+          const u = url + (url.includes('?')?'&':'?') + '_t=' + Date.now(); // キャッシュ殺し
+          const res = await fetch(u, {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(data),
+            cache:'no-store',
+            // 同一オリジンなら same-origin、別オリジン（CORS）なら omit
+            credentials: url.startsWith(location.origin) ? 'same-origin' : 'omit'
+          });
+          if (!res.ok) throw new Error('HTTP '+res.status);
+          return await res.json();
+        }catch(e){ lastErr = e; }
+      }
+      throw lastErr || new Error('API error');
+    }
+
+    // localStorage フォールバック（indexのローカル表示と互換）
+    function saveLocalFallback(post) {
+      try {
+        const key = 'zange_posts';
+        const arr = JSON.parse(localStorage.getItem(key) || '[]');
+        const maxId = arr.reduce((m, p) => Math.max(m, Number(p.id||0)), 0) || 0;
+        arr.push({
+          id: maxId + 1,
+          text: post.text || "",
+          author: post.author || "匿名",
+          createdAt: new Date().toISOString(),
+          target: post.target || "",
+          tag: post.tag || "",
+          bg: post.bg || "",
+          scope: post.scope || "public"
+        });
+        localStorage.setItem(key, JSON.stringify(arr));
+      } catch(e) { console.warn('local fallback failed:', e); }
+    }
+
+    // 背景サムネ選択（仕様維持）
+    (function setupBgPicker(){
+      const picker = document.getElementById('bgPicker');
+      const hidden = document.getElementById('zangeBg');
+      if (!picker || !hidden) return;
+      picker.addEventListener('click', (e)=>{
+        const btn = e.target.closest('.bg-thumb');
+        if (!btn) return;
+        picker.querySelectorAll('.bg-thumb').forEach(b=>b.classList.remove('selected'));
+        btn.classList.add('selected');
+        hidden.value = btn.getAttribute('data-bg') || '';
+      });
+    })();
+
+    // 送信（API優先→失敗時ローカル保存→indexへ戻る）
+    (function setupSubmit(){
+      const form = document.getElementById('postForm');
+      const submitBtn = document.getElementById('submitBtn');
+      if (!form) return;
+
+      form.addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        const text = (document.getElementById('zangeText')?.value || '').trim();
+        const target = (document.getElementById('zangeTargetFixed')?.value || '').trim();
+        const tag = (document.getElementById('futureTag')?.value || '').trim();
+        const bg = (document.getElementById('zangeBg')?.value || '').trim();
+        const scope = (document.querySelector('input[name="scope"]:checked')?.value || 'public').trim();
+
+        if (!text){ alert('投稿内容を入力してください'); return; }
+        if (!target){ alert('「誰に」を選択してください'); return; }
+
+        const author = ''; // 仕様上、未指定のまま（必要になればここに反映）
+        const payload = { text, author, target, tag, bg, scope };
+
+        const originalLabel = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = '投稿中…';
+
+        try{
+          await postJsonWithFallback(payload);
+        }catch(e){
+          console.warn('API save failed, fallback to localStorage:', e?.message || e);
+          saveLocalFallback(payload);
+        }finally{
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalLabel;
+        }
+
+        location.href = 'index.html';
+      });
+    })();
+  </script>
+
+  <!-- フッター（5タブ仕様）＋FABは現状維持 -->
+  <footer class="mobile-tabbar">
+    <nav>
+      <a href="index.html"><span class="icon">🏠</span><span class="label">ホーム</span></a>
+      <a href="topics.html"><span class="icon">🎯</span><span class="label">お題</span></a>
+      <a href="notifications.html" class="nav-link nav-bell">
+        <span class="icon-row"><span class="icon">🔔</span><span id="notifBadge" class="notif-badge" aria-label="未読通知数"></span></span>
+        <span class="label">通知</span>
+      </a>
+      <a href="settings.html"><span class="icon">⚙️</span><span class="label">設定</span></a>
+      <a href="about.html"><span class="icon">📕</span><span class="label">概要</span></a>
+    </nav>
+  </footer>
+
+  <footer>&copy; 2025 zange (テスト公開中)</footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
