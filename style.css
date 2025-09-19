@@ -1,0 +1,1196 @@
+/* =========================
+   ZANGE (mixi2-like theme)
+   ========================= */
+
+/* 基本配色（ラベンダー＋オレンジアクセント） */
+:root{
+  --bg: #f7f5f2;
+  --panel: #ffffff;
+  --panel-border: #ebe9e4;
+  --muted: #77736c;
+  --text: #2b2b2b;
+  --accent: #cab8d9;   /* mix2風のオレンジからラベンダーカラーに変更 */
+  --accent-weak: #ffd8a3;
+  --link: #2f6fb0;     /* 青めリンク */
+  --ring: rgba(255,153,0,.25);
+
+  --radius-lg: 14px;
+  --radius-md: 10px;
+  --shadow: 0 2px 8px rgba(0,0,0,.06);
+  --shadow-strong: 0 8px 24px rgba(0,0,0,.08);
+}
+
+/* 全体 */
+*{ box-sizing: border-box; }
+html,body{
+  margin:0; padding:0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", "Helvetica Neue", Arial, "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+  line-height: 1.65;
+}
+
+/* ヘッダー（淡いピンク→ベージュに近い柔らかグラデ） */
+header{
+  position: sticky; top:0; z-index: 10;
+  background: linear-gradient(0deg, #E6E6FA, #fff1e8);
+  border-bottom: 1px solid var(--panel-border);
+  padding: 18px 14px 12px;
+  text-align: center;
+}
+header h1{
+  margin: 0 0 6px;
+  font-size: clamp(20px, 4.5vw, 32px);
+  letter-spacing: 0.5px;
+}
+header nav{
+  display: grid;
+  grid-auto-flow: column;
+  justify-content: center;
+  gap: 14px;
+}
+header nav a{
+  display: inline-block;
+  padding: 8px 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  color: var(--text);
+  font-weight: 600;
+}
+header nav a:hover{
+  border-color: var(--accent-weak);
+  box-shadow: 0 4px 12px rgba(0,0,0,.08);
+}
+
+/* メイン余白 */
+main{ padding: 18px 16px; max-width: 860px; margin: 0 auto; }
+
+/* カード（懺悔） */
+.card{
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  padding: 18px 16px;
+  margin: 14px 0;
+  box-shadow: var(--shadow);
+  transition: transform .08s ease, box-shadow .12s ease, border-color .12s ease;
+}
+.card:hover{
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-strong);
+  border-color: #e6e2da;
+}
+.card p{
+  margin: 0 0 10px;
+  font-size: clamp(16px, 2.8vw, 20px);
+  word-break: break-word;
+}
+.card small{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+/* リアクション行（🙏😂🤝🌱＋コメントリンク） */
+.reactions{
+  margin-top: 10px;
+  display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center;
+}
+.reactions button{
+  appearance: none;
+  border: 1px solid var(--panel-border);
+  background: #fff;
+  padding: 6px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+}
+.reactions button:hover{
+  border-color: var(--accent-weak);
+  box-shadow: 0 4px 10px rgba(0,0,0,.08);
+}
+.reactions a{
+  margin-left: 2px;
+  text-decoration: none;
+  color: var(--link);
+  font-weight: 700;
+}
+.reactions a:hover{ text-decoration: underline; }
+
+/* フォーム類（post.html / コメントフォーム） */
+form{
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+label{ display:block; margin: 10px 0 6px; color: var(--muted); font-weight: 600; }
+
+textarea, input[type="text"], select{
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--panel-border);
+  background: #fff;
+  outline: none;
+  font-size: 16px;
+}
+textarea:focus, input[type="text"]:focus, select:focus{
+  border-color: var(--accent-weak);
+  box-shadow: 0 0 0 4px var(--ring);
+}
+input[type="radio"]{ transform: translateY(1px); }
+
+button[type="submit"], .btn{
+  appearance: none;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+button[type="submit"]:hover, .btn:hover{
+  filter: brightness(1.02);
+  box-shadow: 0 8px 20px rgba(255,153,0,.25);
+}
+
+/* コメントセクション（detail.html） */
+.comments{
+  margin-top: 18px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  box-shadow: var(--shadow);
+}
+.comments h2, .comments h3{ margin: 6px 0 12px; }
+.comment, .comment-item{
+  border-top: 1px dashed #ece8df;
+  padding: 10px 0;
+}
+.comment:first-child, .comment-item:first-child{ border-top: none; }
+.comment small, .comment-meta{
+  color: var(--muted);
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* ランダム表示の“スッ”アニメ（JS変更不要） */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+#randomCard .card{ animation: fadeUp .22s ease-out; }
+
+/* リンク一般 */
+a{ color: var(--link); }
+a:hover{ text-decoration: underline; }
+
+/* スマホ向け微調整 */
+@media (max-width: 520px){
+  .reactions button{ padding: 6px 9px; }
+  header nav{ gap: 8px; }
+}
+
+/* 任意：ダークモード（OS設定に追従） */
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg: #121212;
+    --panel: #1c1c1c;
+    --panel-border: #2a2a2a;
+    --muted: #a9a9a9;
+    --text: #f1f1f1;
+    --link: #6ea8ff;
+    --ring: rgba(255,153,0,.18);
+    --shadow: 0 2px 10px rgba(0,0,0,.5);
+    --shadow-strong: 0 10px 26px rgba(0,0,0,.6);
+  }
+  header{
+    background: linear-gradient(0deg, #1c1c1c, #222);
+    border-bottom-color: var(--panel-border);
+  }
+  .reactions button{ background:#202020; }
+}
+/* ======= Mobile optimization ======= */
+
+/* iOSの青いタップハイライト抑制 */
+* { -webkit-tap-highlight-color: rgba(0,0,0,0); }
+
+/* 端末の安全領域に沿って余白をとる */
+body { padding-bottom: env(safe-area-inset-bottom); }
+
+/* フッター型タブバー（スマホ専用） */
+.mobile-tabbar {
+  position: sticky;
+  bottom: 0;
+  left: 0; right: 0;
+  display: none;                 /* デフォは非表示（SPでのみ表示） */
+  background: var(--panel);
+  border-top: 1px solid var(--panel-border);
+  box-shadow: 0 -6px 18px rgba(0,0,0,.06);
+  padding: 8px calc(12px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
+}
+.mobile-tabbar nav {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr); /* ← 4つに */
+  gap: 8px;
+}
+.mobile-tabbar a {
+  text-decoration: none;
+  color: var(--text);
+  background: #fff;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 10px 8px;
+  text-align: center;
+  font-weight: 700;
+  box-shadow: var(--shadow);
+}
+
+/* 投稿ボタンのFAB（スマホで親指タップしやすく） */
+.fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(76px + env(safe-area-inset-bottom)); /* タブバーの少し上 */
+  z-index: 20;
+  display: none;                 /* SPで表示 */
+  padding: 12px 16px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 800;
+  box-shadow: 0 10px 24px rgba(255,153,0,.35);
+  text-decoration: none;
+}
+
+/* 反応ボタンを指で押しやすいサイズに */
+.reactions button {
+  min-height: 44px;             /* アクセシビリティ推奨 */
+  min-width: 44px;
+  font-size: 16px;               /* iOSの拡大防止 */
+}
+
+/* タイムラインの左右余白を少し狭める（スマホ） */
+@media (max-width: 600px){
+  main { padding: 14px 12px; }
+  .card { padding: 16px 14px; margin: 12px 0; }
+  .reactions { gap: 8px; }
+  .reactions button { flex: 1 1 auto; }
+
+  /* モバイルUIを表示 */
+  .mobile-tabbar { display: block; }
+  .fab { display: inline-block; }
+}
+
+/* 片手操作向けに文字サイズと行間を微調整（小さめ端末） */
+@media (max-width: 380px){
+  .card p { font-size: 16px; }
+  header nav a { padding: 6px 10px; font-size: 14px; }
+}
+
+/* 可能ならアニメ控えめ設定に追従 */
+@media (prefers-reduced-motion: reduce){
+  .card, #randomCard .card { animation: none !important; transition: none !important; }
+}
+/* ===== PC/スマホでのナビ出し分け ===== */
+
+/* スマホではヘッダーnavを非表示（フッタータブに統一） */
+@media (max-width: 768px) {
+  header nav {
+    display: none !important;
+  }
+}
+
+/* PCではフッターのタブバーとFABを非表示 */
+@media (min-width: 769px) {
+  .mobile-tabbar,
+  .fab {
+    display: none !important;
+  }
+}
+/* FAB 内の絵文字だけ大きく */
+.fab .emoji {
+  font-size: 1.6em;   /* ← お好みで 1.8em や 2em にも */
+  line-height: 1;
+  vertical-align: middle;
+}
+/* ===== 今日のお題（横スクロール） ===== */
+.topics-strip{
+  margin: 10px auto 0;
+  padding: 10px 8px;
+  max-width: 1000px;
+  overflow-x: auto;               /* ← 横スクロール */
+  -webkit-overflow-scrolling: touch;
+}
+.topics-row{
+  display: inline-flex;
+  gap: 10px;
+  padding: 2px 4px 6px;
+}
+.topic-chip{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid var(--panel-border, #ececec);
+  border-radius: 999px;
+  padding: 8px 10px;
+  box-shadow: var(--shadow, 0 2px 8px rgba(0,0,0,.06));
+  white-space: nowrap;
+}
+.topic-chip .t-label{ font-weight: 700; cursor: pointer; }
+.topic-chip .t-post{
+  display: inline-block;
+  text-decoration: none;
+  background: var(--accent, #ff9900);
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-weight: 800;
+  box-shadow: var(--shadow, 0 2px 8px rgba(0,0,0,.06));
+}
+.topic-chip .t-post:hover{ filter: brightness(1.03); }
+
+
+/* フッタータブを5列に（ホーム/検索/ランダム/お題/設定） */
+.mobile-tabbar nav {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr); /* ← 4→5 に変更 */
+  gap: 8px;
+}
+/* 画像サムネ選択 */
+.bg-picker{
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin: 8px 0 14px;
+}
+.bg-thumb{
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  border: 2px solid var(--panel-border);
+  background-size: cover;
+  background-position: center;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+.bg-thumb.selected{
+  outline: 3px solid var(--accent);
+  border-color: var(--accent);
+}
+
+/* Bokete風の表示（画像＋大きいキャプション） */
+.zange-visual{
+  margin-bottom: 10px;
+}
+.zange-visual img{
+  width: 100%;
+  max-height: 320px;     /* お好みで */
+  object-fit: cover;
+  border-radius: 12px;
+  display: block;
+}
+.zange-caption{
+  margin-top: 10px;
+  font-weight: 900;
+  font-size: clamp(18px, 4.8vw, 28px);
+  line-height: 1.35;
+  letter-spacing: .3px;
+  text-align: left;      /* Boketeっぽく左寄せ */
+}
+.card small {
+  display: block;   /* ← 強制的にブロック要素化して縦並びに */
+  margin-top: 4px;  /* 適度な余白 */
+}
+/* フッターメニューの枠線と影を削除 */
+footer.mobile-tabbar {
+  border-top: none !important;   /* 枠線を削除 */
+  box-shadow: none !important;   /* 影を削除 */
+}
+footer.mobile-tabbar nav a {
+  border: none !important;       /* 個別リンクの枠も削除 */
+  box-shadow: none !important;
+}
+/* ===== 固定フッター（全ページ共通で使えます） ===== */
+html, body { height: 100%; }
+body { 
+  min-height: 100vh;
+  /* フッターが重ならないよう下パディングを確保 */
+  padding-bottom: calc(80px + env(safe-area-inset-bottom, 0));
+}
+
+/* フッターナビを常に最下部へ固定 */
+footer.mobile-tabbar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  width: 100%;
+  background: #fff;            /* 透け防止 */
+  /* 影や枠は前回の通り消したまま */
+  border-top: none !important;
+  box-shadow: none !important;
+  z-index: 50;
+}
+
+/* iPhone のホームインジケータ領域に余白 */
+footer.mobile-tabbar nav {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+/* postページのフォーム下余白確保 */
+#postForm {
+  padding-bottom: 120px; /* ← フッター＋余白分 */
+}
+/* タイムラインの最下部に余白を入れてスクロールできるようにする */
+#timeline {
+  padding-bottom: 120px; /* ← フッター高さ＋余裕分 */
+}
+/* --- reaction buttons: no border / no shadow --- */
+.card .reactions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* ボタンの枠・影を消す（現在の仕様は維持） */
+.card .reactions button {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  border-radius: 0;            /* 角丸の枠感も消す */
+  padding: 6px 8px;            /* タップしやすさだけ確保 */
+}
+
+/* 触った時だけうっすらフィードバック（任意） */
+.card .reactions button:active {
+  background: rgba(0,0,0,.04);
+}
+
+/* アクセシビリティのフォーカス（任意） */
+.card .reactions button:focus-visible {
+  outline: 2px solid rgba(0,0,0,.2);
+  outline-offset: 2px;
+}
+
+/* コメントリンクは枠なしのまま */
+.card .reactions a {
+  text-decoration: none;
+}
+/* Settings: プロフィール表示で性別・年齢を非表示 */
+#profileView #profileGenderShow,
+#profileView #profileAgeShow { display: none !important; }
+/* --- settings.html のフォローボタン用テキスト色修正 --- */
+#followingList .btn,
+#followersList .btn {
+  color: #111 !important;   /* 濃い文字色 */
+  background: #fff !important; /* 背景は白のまま */
+  border: 1px solid #ccc;   /* 薄い枠線（必要なら） */
+}
+/* --- settings.html 自分の投稿エリアのボタンテキスト色修正 --- */
+#myPostsList .btn {
+  color: #111 !important;       /* 黒に近い濃い文字色 */
+  background-color: #fff !important; /* 背景は白ベース */
+  border: 1px solid #ccc;       /* 枠線を薄く追加（必要に応じて） */
+}
+
+/* 削除ボタンだけ赤っぽくする */
+#myPostsList .btn.danger {
+  background-color: #ffecec !important;
+  border: 1px solid #ffb3b3;
+  color: #d00 !important;       /* 赤字でわかりやすく */
+}
+
+/* 保存ボタンは黒地に白字のまま維持（読みやすいよう調整） */
+#myPostsList .btn.primary {
+  background-color: #111 !important;
+  border: 1px solid #111;
+  color: #fff !important;
+}
+/* --- settings.html プロフィール編集ボタン文字色修正 --- */
+#profileEdit .btn {
+  color: #111 !important;       /* 黒文字で読みやすく */
+  background-color: #fff;       /* 白背景 */
+  border: 1px solid #ccc;
+}
+
+/* 保存ボタン（primary）は白文字ではなく黒文字に */
+#profileEdit .btn.primary {
+  background-color: #f1f5f9;    /* 薄いグレー背景 */
+  border: 1px solid #999;
+  color: #111 !important;       /* 黒文字 */
+}
+
+/* キャンセルボタンも分かりやすく */
+#profileEdit .btn.cancel {
+  background-color: #fff;
+  border: 1px solid #ccc;
+  color: #111 !important;
+}
+/* プロフィール入力欄の縦幅を広げる */
+#profileEdit textarea#profileBio {
+  min-height: 100px;   /* デフォルトより広くする */
+  resize: vertical;    /* ユーザーが上下にリサイズできるように */
+}
+/* プロフィール編集ボタンの文字色を黒に変更 */
+#editProfileBtn {
+  color: #333 !important;  /* 濃いグレーで可読性UP */
+}
+/* 投稿編集フォームの本文欄の縦幅を広げる */
+.edit-area textarea.e-text {
+  min-height: 120px;  /* 縦幅を広げる */
+  resize: vertical;   /* ユーザーが縦方向にリサイズ可能にする */
+}
+/* フッターメニュー中央寄せ */
+footer {
+  display: flex;
+  justify-content: center; /* 横方向の中央寄せ */
+  align-items: center;     /* 縦方向の中央寄せ */
+  width: 100%;
+}
+
+footer nav {
+  display: flex;
+  justify-content: center; /* nav内のアイコンも中央寄せ */
+  gap: 40px; /* アイコンの間隔（必要に応じて調整） */
+  width: 100%;
+}
+/* フッター自体は全幅にして中央寄せの土台を作る */
+footer {
+  width: 100%;
+  text-align: center;           /* inline-flex フォールバック */
+}
+
+/* nav を中央に置く最小限の指定（inline-flexで text-align:center と両対応） */
+footer nav {
+  display: inline-flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 40px;                    /* アイコン間の余白 調整可 */
+  margin: 0 auto !important;    /* left寄せの打ち消し */
+  max-width: 100%;
+}
+
+/* アイコン（リンク）を中央に置きやすい形に */
+footer nav a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  text-decoration: none;
+  font-size: 28px;              /* 必要なら調整 */
+}
+footer nav {
+  display: inline-flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 40px; /* ← アイコン同士のスペース。20〜50pxくらいで調整 */
+}
+
+footer nav a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px; /* アイコンサイズはそのまま */
+}
+/* === Footer menu: center & equal spacing (override) === */
+footer.mobile-tabbar nav{
+  display: flex !important;                 /* grid を打ち消す */
+  justify-content: space-evenly !important; /* 均等スペース配置 */
+  align-items: center !important;
+  width: 100%;
+  max-width: 520px;                         /* 端末幅が広いときも詰まり過ぎないように任意で制限 */
+  margin: 0 auto !important;
+  padding: 4px 8px;                         /* 好みで微調整 */
+  gap: 0 !important;                        /* 競合するgap指定を無効化 */
+}
+
+/* 余計なマージンをゼロに（等間隔を崩さない） */
+footer.mobile-tabbar nav > a{
+  margin: 0 !important;
+  flex: 0 0 auto;
+}
+
+/* UL/LI 構造の場合の保険（使っていなければ無害） */
+footer.mobile-tabbar nav ul{
+  display: flex !important;
+  justify-content: space-evenly !important;
+  align-items: center !important;
+  width: 100%;
+  margin: 0; padding: 0;
+  list-style: none;
+  gap: 0 !important;
+}
+footer.mobile-tabbar nav li{
+  flex: 0 0 auto;
+  margin: 0 !important;
+}
+footer.mobile-tabbar nav li > a{
+  margin: 0 !important;
+}
+/* 通知バッジ */
+#notifBadge {
+  background: #ff3b30;
+  color: white;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  position: absolute;
+  margin-left: 4px;
+  top: -4px;
+  right: -4px;
+  display: none;
+}
+
+/* 通知リスト */
+#notificationList {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0;
+}
+
+#notificationList li {
+  padding: 10px;
+  border-bottom: 1px solid #ddd;
+}
+/* フッターのナビ1行並び */
+.nav-link.nav-bell{
+  display: inline-flex;         /* ← 横並び */
+  align-items: center;          /* 垂直中央 */
+  gap: 6px;                     /* アイコンと数字の間隔 */
+}
+
+/* ベル絵文字の見栄え（任意） */
+.nav-link .nav-emoji{
+  display:inline-block;
+  line-height:1;
+  font-size: 28px;              /* 他アイコンと合わせる */
+}
+
+/* 未読バッジ（右隣に出す） */
+.notif-badge{
+  display: none;                /* 0件時はJSが非表示にする想定 */
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: #ff5b2e;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  /* 重要：位置指定をリセット（ズレ防止） */
+  position: static;             /* 以前 absolute なら上書きする */
+  margin-left: 0;               /* 念のため */
+}
+/* ① フッターの箇条点(•)を消す + 左余白もリセット */
+footer ul,
+footer li {
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* ② ベルのリンクを横並びにして、バッジを右隣に配置 */
+footer .nav-link.nav-bell {
+  display: inline-flex !important;   /* 横並び */
+  align-items: center !important;    /* 縦中央 */
+  gap: 6px !important;               /* アイコンと数字の間隔 */
+}
+
+/* ③ 以前の absolute/fixed を打ち消して「右隣」に出す */
+#notifBadge,
+.notif-badge {
+  position: static !important;       /* ← これが超重要 */
+  right: auto !important;
+  bottom: auto !important;
+  transform: none !important;
+  margin: 0 !important;
+
+  display: none;                     /* 0件はJSで非表示の前提 */
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: #ff5b2e;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* ④ ベル絵文字の見栄え（任意：他アイコンと合わせる） */
+footer .nav-bell .nav-emoji {
+  display: inline-block;
+  line-height: 1;
+  font-size: 28px;
+}
+/* ===== Footer Menu 高さ調整 ===== */
+footer nav {
+  height: 50px;              /* 縦幅を小さく（デフォルトより縮小） */
+  padding: 4px 0;            /* 上下の余白を抑える */
+}
+
+footer nav a {
+  font-size: 20px;           /* アイコンサイズはそのままでもOK */
+  line-height: 1;            /* 行間を詰める */
+}
+
+footer nav a span {
+  display: block;
+  font-size: 10px;           /* テキストラベルがある場合は小さく */
+  margin-top: 2px;
+}
+
+/* 通知バッジが潰れないよう微調整 */
+#notifWrapper {
+  position: relative;
+  display: inline-block;
+  line-height: 1;
+}
+#notifBadge {
+  position: absolute;
+  top: -4px;
+  right: -10px;
+}
+/* ---- login/signup 共通の見た目合わせ ---- */
+.auth-wrap{
+  max-width: 640px;
+  margin: 18px auto;
+  padding: 0 14px;
+}
+.auth-card{
+  padding: 18px 16px;
+}
+.auth-head{
+  text-align: center;
+  margin-bottom: 12px;
+}
+.auth-icon{
+  font-size: 28px;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.auth-title{
+  font-weight: 800;
+  font-size: 18px;
+  margin-bottom: 2px;
+}
+.auth-sub{
+  color: var(--muted);
+  font-size: 14px;
+}
+.pw-field{
+  position: relative;
+}
+.pw-field .pw-toggle{
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px;
+}
+.auth-links{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 12px;
+}
+.auth-links .muted{
+  color: var(--muted);
+  text-decoration: none;
+}
+html, body {
+  height: auto;              /* 固定高さを解除 */
+  min-height: 100%;          /* 最低限の高さは確保 */
+  overflow-y: auto;          /* 縦スクロールを有効化 */
+}
+
+main {
+  min-height: calc(100vh - 100px); /* ヘッダー・フッターを引いた高さを確保 */
+  padding-bottom: 80px;            /* フッターに隠れない余白を確保 */
+  box-sizing: border-box;
+}
+/* === Footer menu: icon + text === */
+footer.mobile-tabbar nav a {
+  display: flex;
+  flex-direction: column;   /* アイコンとテキストを縦に */
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;          /* テキスト小さめ */
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  gap: 2px;                 /* アイコンとテキストの間隔 */
+}
+
+footer.mobile-tabbar nav a .icon {
+  font-size: 20px;          /* アイコン大きめ */
+  line-height: 1;
+}
+
+footer.mobile-tabbar nav a .label {
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+/* 🔔とバッジを中央揃えのまま横並び */
+footer .nav-link.nav-bell .icon-row {
+  display: inline-flex;
+  justify-content: center;   /* 🔔を中央に */
+  align-items: center;
+  position: relative;
+}
+
+/* バッジは🔔の右隣に固定 */
+footer .nav-link.nav-bell #notifBadge,
+footer .nav-link.nav-bell .notif-badge {
+  margin-left: 6px !important;   /* 🔔との間隔 */
+  position: relative !important; /* 相対位置で右隣 */
+  top: 0 !important;
+  right: 0 !important;
+  transform: none !important;
+}
+
+/* バッジは“右隣”に置く（絶対配置を無効化） */
+footer .nav-link.nav-bell #notifBadge,
+footer .nav-link.nav-bell .notif-badge{
+  position: static !important;   /* ← 右隣に並べるために絶対配置を解除 */
+  margin: 0 !important;
+  transform: none !important;
+  right: auto !important;
+  top: auto !important;
+  bottom: auto !important;
+
+  display: none;                 /* 0件の時はJSで非表示 */
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: #cab8d9;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* 既存の“アイコン＋テキスト縦並び”はそのまま */
+footer.mobile-tabbar nav a{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+/* 自分の投稿 検索ツールバー */
+.my-posts-toolbar{
+  margin: 8px 0 10px;
+}
+.my-posts-toolbar input[type="search"]{
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--panel-border, #ebe9e4);
+  background: #fff;
+  font-size: 16px;
+  outline: none;
+}
+.my-posts-toolbar input[type="search"]:focus{
+  border-color: var(--accent-weak, #ffd8a3);
+  box-shadow: 0 0 0 4px var(--ring, rgba(255,153,0,.25));
+}
+/* ===== Follow tabs ===== */
+.follow-tabs { margin-top: 6px; }
+.follow-tabs .tablist{
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 8px;
+}
+.follow-tabs .follow-stats{
+  margin-left: auto; color: var(--muted);
+  font-weight: 600; font-size: 14px;
+}
+.follow-tabs .tab{
+  appearance: none; border: 1px solid var(--panel-border);
+  background: #fff; color: var(--text);
+  padding: 8px 12px; border-radius: 999px;
+  cursor: pointer; font-weight: 700;
+}
+.follow-tabs .tab.active{
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
+.follow-tabs .tabpanel{ display: none; }
+.follow-tabs .tabpanel.show{ display: block; }
+/* ===== Follow tabs (header-like) ===== */
+.follow-tabs .tabbar{
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* 左:フォロワー / 右:フォロー中 */
+  align-items: end;
+  gap: 0;
+  margin: 2px 0 10px;
+}
+.follow-tabs .tab2{
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 10px 0 12px;
+  font-size: clamp(18px, 4.5vw, 22px);
+  font-weight: 900;
+  color: var(--muted);
+  cursor: pointer;
+}
+.follow-tabs .tab2.active{ color: var(--text); }
+
+/* 下線スライダー（左右 50% 幅を移動） */
+.follow-tabs .tab-underline{
+  position: absolute;
+  left: 50%;               /* 既定: 右（フォロー中） */
+  bottom: 0;
+  width: 50%;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #cab8d9, #E6E6FA);
+  transition: left .22s ease;
+}
+
+/* 件数表示（任意） */
+.follow-tabs .follow-stats.under{
+  margin: 4px 0 8px;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* パネル切替は既存のまま */
+.follow-tabs .tabpanel{ display: none; }
+.follow-tabs .tabpanel.show{ display: block; }
+/* ===== ダークモードを無効化（ライト配色で固定） ===== */
+:root { color-scheme: light; }  /* フォーム/スクロールバーもライトに */
+
+@media (prefers-color-scheme: dark) {
+  /* トークンをライト値で再定義（既存のダーク指定を上書き） */
+  :root{
+    --bg: #f7f5f2;
+    --panel: #ffffff;
+    --panel-border: #ebe9e4;
+    --muted: #77736c;
+    --text: #2b2b2b;
+    --link: #2f6fb0;
+    --ring: rgba(255,153,0,.25);
+    --shadow: 0 2px 8px rgba(0,0,0,.06);
+    --shadow-strong: 0 8px 24px rgba(0,0,0,.08);
+  }
+
+  /* ダーク時の個別上書きをライトに戻す */
+  header{
+    background: linear-gradient(0deg, #E6E6FA, #fff1e8);
+    border-bottom-color: var(--panel-border);
+  }
+  .reactions button{ background:#fff; }
+}
+/* ===== スタンプピッカー（モーダル） ===== */
+.stamp-modal-backdrop{
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.45);
+  display: none; z-index: 999;
+}
+.stamp-modal{
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%,-50%);
+  width: min(92vw, 520px);
+  background: #fff; border-radius: 16px;
+  padding: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.25);
+}
+.stamp-modal h3{ margin: 0 0 10px; font-size: 16px; }
+.stamp-grid{
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 10px; padding: 6px 2px;
+}
+.stamp-item{
+  display: grid; place-items: center;
+  background: #f8fafc; border: 1px solid #e5e7eb;
+  border-radius: 12px; padding: 8px; cursor: pointer;
+  transition: transform .05s ease;
+}
+.stamp-item:hover{ transform: translateY(-1px); }
+.stamp-item img{ width: 44px; height: 44px; object-fit: contain; }
+
+.stamp-modal .row-end{ display:flex; justify-content:flex-end; margin-top: 10px; }
+.stamp-modal .btn-close{
+  background:#111; color:#fff; border:none; border-radius: 999px;
+  padding: 8px 12px; cursor:pointer;
+}
+
+/* 既存リアクションの画像スキン（前回案） */
+.rx-btn{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; background:transparent; border:none; cursor:pointer; }
+.rx-btn .rx-ic{ width:22px; height:22px; object-fit:contain; }
+.rx-btn .rx-count{ font-weight:700; }
+
+/* 「＋」ボタン */
+.rx-add{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:36px; height:36px; border-radius:10px;
+  border:1px solid #e5e7eb; background:#fff; cursor:pointer;
+  font-size:20px; line-height:1;
+}
+/* レイアウトがはみ出さないための基本設定 */
+*, *::before, *::after {
+  box-sizing: border-box;     /* ← これが一番効きます */
+}
+html, body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;         /* 横スクロール防止（念のため） */
+}
+.site-header {
+  background: linear-gradient(to right, #fff6f2, #eaeaff);
+  border-bottom: 1px solid #eee;
+  padding: 12px 16px;
+}
+.site-header .inner {
+  max-width: 960px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.logo {
+  font-weight: 800;
+  text-decoration: none;
+  color: #111;
+  font-size: 22px;
+  letter-spacing: 1px;
+}
+.user-ico {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.user-ico img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.user-ico span {
+  font-size: 14px;
+  font-weight: 600;
+  color: #38bdf8; /* スクショのような水色 */
+}
+/* --- signup ボタン専用カラー --- */
+#signupSubmit {
+  background-color: #cab8d9 !important;
+  border-color: #cab8d9 !important;
+  color: #fff !important;
+}
+
+#signupSubmit:hover,
+#signupSubmit:focus {
+  filter: brightness(0.95);
+}
+
+#signupSubmit:active {
+  filter: brightness(0.9);
+}
+/* --- about.html と同じ見た目に揃えるための共通スタイル --- */
+.related-links h2 {
+  position: relative;
+  padding-left: 12px;            /* 見出し左の余白 */
+  margin-bottom: 10px;
+}
+.related-links h2::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .2em;
+  bottom: .2em;
+  width: 6px;
+  background: #cab8d9;          /* 見出し左のアクセントバー（スクショの色） */
+  border-radius: 3px;
+}
+
+.bullet-links {
+  list-style: disc;
+  padding-left: 1.4rem;
+  margin: 6px 0 0;
+}
+.bullet-links li + li {
+  margin-top: 8px;
+}
+.bullet-links a {
+  text-decoration: none;         /* about と同じ：下線なしリンク */
+}
+.bullet-links a:hover {
+  text-decoration: underline;    /* ホバー時だけ下線に（任意） */
+}
+.stack {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 16px;
+}
+/* カード全体を中央寄せ & 幅制限 */
+.card.stack {
+  max-width: 860px;   /* 他カードと同じ幅 */
+  margin: 16px auto;  /* 中央寄せ */
+  padding: 16px;
+  box-sizing: border-box;
+}
+.tutorial-link {
+  text-align: center;
+  background: #ffffff;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  box-shadow: var(--shadow);
+  margin-bottom: 12px;
+}
+
+.tutorial-link .tutorial-btn {
+  display: inline-block;
+  text-decoration: none;
+  font-weight: 700;
+  color: var(--link);
+  font-size: 15px;
+}
+
+.tutorial-link .tutorial-btn:hover {
+  text-decoration: underline;
+}
+/* チュートリアル導線とお題の間の余白を調整 */
+.tutorial-link {
+  margin-bottom: 0 !important; /* 下の余白を小さくする */
+}
+
+.topics-strip {
+  margin-top: 0 !important; /* 上の余白をなくす */
+}
+/* チュートリアル導線セクション（about.htmlのヘッダー下と統一） */
+.tutorial-section {
+  background: #fff;           /* 白背景 */
+  padding: 5px 0;            /* 少し余白 */
+  text-align: center;         /* 中央寄せ */
+  border-bottom: 1px solid var(--panel-border); /* 区切り線（必要なら） */
+}
+
+.tutorial-link.card {
+  display: inline-block;
+  background: #fff;
+  border: none;               /* 余計な枠を消す */
+  box-shadow: none;           /* 影を消す */
+  margin: 0;                  /* 不要な余白をなくす */
+}
