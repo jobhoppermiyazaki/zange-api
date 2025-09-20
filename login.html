@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>zange - ログイン</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* ページ固有の軽いスタイル */
+    body{ background:#f9f8f6; }
+    main{ max-width:560px; margin:0 auto; padding:16px; }
+    .login-card{
+      background:#fff; border-radius:16px; box-shadow:0 8px 24px rgba(16,24,40,.06);
+      padding:24px; margin-top:16px;
+    }
+    .field{ margin-top:14px; }
+    .field label{ display:block; font-weight:700; margin-bottom:8px; }
+    .field input{
+      width:100%; padding:14px 16px; border:1px solid #e5e7eb; border-radius:12px;
+      font-size:16px; background:#fff;
+    }
+    .btn{ display:block; width:100%; border:0; border-radius:999px; padding:14px 16px; font-weight:700; cursor:pointer; }
+    .btn-login{ background:#cab8d9; color:#fff; box-shadow:0 8px 20px rgba(202,184,217,.35); margin-top:22px; }
+    .auth-links{ margin-top:10px; font-size:14px; text-align:left; }
+    .auth-links a{ color:#2563eb; text-decoration:none; }
+    .auth-links a:hover{ text-decoration:underline; }
+    .legal-links{ margin-top:16px; text-align:center; font-size:13px; color:#555; }
+  </style>
+</head>
+<body>
+  <!-- 共通ヘッダー -->
+  <header>
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <h1><a href="index.html" style="text-decoration:none; color:inherit;">zange</a></h1>
+      <span id="currentUserIcon"></span>
+    </div>
+  </header>
+
+  <main>
+    <form id="loginForm" class="login-card" autocomplete="on">
+      <h2 style="margin:0 0 6px; font-size:18px;">ログイン</h2>
+      <p class="muted" style="margin:0 0 6px; color:#6b7280;">メールアドレスとパスワードを入力してください。</p>
+
+      <div class="field">
+        <label for="loginEmail">メールアドレス</label>
+        <input id="loginEmail" type="email" inputmode="email" autocomplete="email" required placeholder="you@example.com" />
+      </div>
+
+      <div class="field">
+        <label for="loginPass">パスワード</label>
+        <input id="loginPass" type="password" autocomplete="current-password" required placeholder="8文字以上が目安" />
+      </div>
+
+      <button id="loginBtn" type="submit" class="btn btn-login">ログイン</button>
+
+      <div class="auth-links">
+        <a href="signup.html">新規登録はこちら</a>
+      </div>
+    </form>
+
+    <!-- 法務系リンク（共通導線） -->
+    <div class="legal-links">
+      <a href="about.html">サービス概要</a> ｜ <a href="terms.html">利用規約</a> ｜ <a href="privacy.html">プライバシーポリシー</a>
+      <p style="margin:6px 0 0;">© 2025 zange（テスト公開中）</p>
+    </div>
+  </main>
+
+  <script src="script.js"></script>
+  <script>
+    // ---- フォールバック用の簡易ログイン関数 ----
+    function fallbackLoginUser(email, pass){
+      // 最低限のバリデーションのみ（本番では必ずサーバ認証に置き換え）
+      if (!email || !pass) return false;
+      try{
+        const profile = { email, nickname: email.split('@')[0], loggedInAt: new Date().toISOString() };
+        localStorage.setItem('zange_current_user', JSON.stringify(profile));
+        // 通知バッジ等、初期化が必要ならここで
+        return true;
+      }catch{ return false; }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const form = document.getElementById("loginForm");
+      const emailEl = document.getElementById("loginEmail");
+      const passEl  = document.getElementById("loginPass");
+
+      form?.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const email = (emailEl?.value || '').trim();
+        const pass  = (passEl?.value  || '').trim();
+        if (!email || !pass){
+          alert("メールアドレスとパスワードを入力してください");
+          return;
+        }
+
+        // script.js に loginUser があればそれを優先
+        let ok = false;
+        try{
+          if (typeof loginUser === 'function') {
+            ok = !!loginUser(email, pass);
+          } else {
+            ok = fallbackLoginUser(email, pass);
+          }
+        }catch{
+          ok = fallbackLoginUser(email, pass);
+        }
+
+        if (ok){
+          alert("ログインしました");
+          location.href = "index.html";
+        }else{
+          alert("メールアドレスまたはパスワードが違います");
+        }
+      });
+    });
+  </script>
+</body>
+</html>
