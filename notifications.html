@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>zange - 通知</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* ページ内だけの軽い補助 */
+    .notif-empty { color:#6b7280; padding:14px }
+    .notif-item  { display:flex; gap:10px; align-items:flex-start }
+    .notif-dot   { width:8px; height:8px; border-radius:999px; background:#111; margin-top:8px; flex:0 0 8px }
+    .notif-meta  { font-size:12px; color:#6b7280; margin-top:4px }
+    .notif-link  { color:inherit; text-decoration:none }
+    .notif-link:hover { text-decoration:underline }
+  </style>
+</head>
+<body>
+  <header>
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <h1><a href="index.html" style="text-decoration:none; color:inherit;">zange</a></h1>
+      <span id="currentUserIcon"></span>
+    </div>
+  </header>
+
+  <main style="padding-bottom:90px">
+    <section class="card">
+      <div class="section-title" style="font-weight:800">通知</div>
+      <ul id="notificationList" style="list-style:none; padding:0; margin:0"></ul>
+    </section>
+  </main>
+
+  <footer class="mobile-tabbar">
+    <nav>
+      <a href="index.html">
+        <span class="icon">🏠</span><span class="label">ホーム</span>
+      </a>
+      <a href="topics.html">
+        <span class="icon">🎯</span><span class="label">お題</span>
+      </a>
+      <a href="notifications.html" class="nav-link nav-bell">
+        <span class="icon-row">
+          <span class="icon">🔔</span>
+          <span id="notifBadge" class="notif-badge" aria-label="未読通知数"></span>
+        </span>
+        <span class="label">通知</span>
+      </a>
+      <a href="settings.html">
+        <span class="icon">⚙️</span><span class="label">設定</span>
+      </a>
+      <a href="about.html">
+        <span class="icon">📕</span><span class="label">概要</span>
+      </a>
+    </nav>
+  </footer>
+
+  <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
+
+  <script src="script.js"></script>
+  <script>
+    // ---- 通知データ取得（script.js があればそれを使用。なければ localStorage フォールバック） ----
+    async function getNotifs() {
+      if (typeof getNotifications === 'function') {
+        try { return await getNotifications(); } catch { /* fallthrough */ }
+      }
+      try { return JSON.parse(localStorage.getItem('zange_notifications') || '[]'); }
+      catch { return []; }
+    }
+
+    // ---- 日付表示（script.js に formatDate があれば利用） ----
+    function fmtDate(iso) {
+      if (typeof formatDate === 'function') return formatDate(iso);
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (Number.isNaN(+d)) return '';
+      return d.toLocaleString('ja-JP', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+    }
+
+    // ---- 未読バッジ 0 にする（script.js に更新関数があれば利用）----
+    function clearBadge() {
+      if (typeof updateNotifBadge === 'function') {
+        updateNotifBadge(0);
+      } else {
+        const el = document.getElementById('notifBadge');
+        if (el) el.textContent = '';
+      }
+    }
+
+    // ---- 既読化（script.js に markAllNotificationsRead があれば利用）----
+    function markRead() {
+      if (typeof markAllNotificationsRead === 'function') {
+        try { markAllNotificationsRead(); } catch {}
+      } else {
+        // 簡易な既読マーキング（フォールバック）
+        localStorage.setItem('zange_notifications_read_at', Date.now().toString());
+      }
+    }
+
+    // ---- 描画 ----
+    (async function renderNotifs(){
+      const listEl = document.getElementById('notificationList');
+      const items  = await getNotifs();
+
+      if (!items || items.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'notif-empty';
+        li.textContent = '通知はありません。';
+        listEl.appendChild(li);
+      } else {
+        items
+          .sort((a,b)=> String(b.createdAt||b.date||'').localeCompare(String(a.createdAt||a.date||'')))
+          .forEach(n => {
+            const li = document.createElement('li');
+            li.className = 'card';
+            li.style.padding = '12px';
+
+            const linkStart = n.url ? `<a class="notif-link" href="${n.url}">` : '';
+            const linkEnd   = n.url ? `</a>` : '';
+
+            li.innerHTML = `
+              <div class="notif-item">
+                <span class="notif-dot" aria-hidden="true"></span>
+                <div>
+                  <div>${linkStart}${(n.text || n.message || '通知')}${linkEnd}</div>
+                  <div class="notif-meta">${fmtDate(n.createdAt || n.date)}</div>
+                </div>
+              </div>
+            `;
+            listEl.appendChild(li);
+          });
+      }
+
+      // 既読処理＋バッジをクリア
+      markRead();
+      clearBadge();
+    })();
+  </script>
+
+  <footer>&copy; 2025 zange (テスト公開中)</footer>
+</body>
+</html>
