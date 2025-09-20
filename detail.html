@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>zange - 詳細</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .stack { max-width: 860px; margin: 0 auto; padding: 16px; }
+    .muted { color: #666; }
+    .hidden-compat { display: none; }
+    .detail-hero{
+      border-radius:14px; min-height:160px; background:#f7f7f7 center/cover no-repeat;
+      display:flex; align-items:flex-end; padding:12px;
+    }
+    .detail-title{ font-weight:800; font-size:18px; }
+    .post-meta{ font-size:12px; color:#6b7280; margin-top:6px; display:flex; gap:6px; flex-wrap:wrap }
+    .comment-item{ padding:10px 12px; border:1px solid #eee; border-radius:10px; margin:8px 0 }
+    .comment-meta{ font-size:12px; color:#6b7280; margin-top:4px }
+  </style>
+  <script>
+    // 同一オリジン優先（Render想定）→ 相対 → ルート
+    window.ZANGE_API_BASES = [
+      location.origin.replace(/\/+$/,'') + '/api/posts',
+      'api/posts',
+      '/api/posts'
+    ];
+  </script>
+</head>
+<body>
+  <header>
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <h1><a href="index.html" style="text-decoration:none; color:inherit;">zange</a></h1>
+      <span id="currentUserIcon"></span>
+    </div>
+  </header>
+
+  <main class="stack">
+    <!-- 互換：旧スクリプトが使う描画先 -->
+    <section id="detailCard" class="card"></section>
+    <!-- 新描画先 -->
+    <section id="detailContainer"></section>
+
+    <!-- コメント -->
+    <section class="comments">
+      <h2>コメント</h2>
+      <div id="commentList" class="comment-list muted">まだコメントはありません。</div>
+
+      <form id="commentForm" class="comment-form" autocomplete="off">
+        <input type="hidden" id="commentUser" value="匿名" />
+        <input type="hidden" id="cName" class="hidden-compat" value="匿名" />
+
+        <label>コメント</label>
+        <textarea id="commentText" required placeholder="わかる！ / 自分もやった😂 など"></textarea>
+        <textarea id="cText" class="hidden-compat"></textarea>
+
+        <button type="submit">投稿</button>
+      </form>
+      <p id="commentNote" class="muted" style="margin-top:8px;">※ 公開投稿のみコメント可能（MVP仕様）</p>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+  <script>
+    // ===== ユーティリティ =====
+    function fmtDate(iso){
+      if (typeof formatDate === 'function') return formatDate(iso);
+      try {
+        const d = new Date(iso||'');
+        if (isNaN(d)) return '';
+        const y=d.getFullYear(), m=('0'+(d.getMonth()+1)).slice(-2), dd=('0'+d.getDate()).slice(-2);
+        const hh=('0'+d.getHours()).slice(-2), mm=('0'+d.getMinutes()).slice(-2);
+        return `${y}/${m}/${dd} ${hh}:${mm}`;
+      } catch { return iso || ''; }
+    }
+    function esc(s){ return (s||'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
+    function q(name){
+      const u = new URL(location.href);
+      return u.searchParams.get(name) || '';
+    }
+    async function fetchJsonWithFallback(urls, init){
+      let last;
+      for (const u of urls){
+        try{
+          const url = u + (u.includes('?')?'&':'?') + '_t='+Date.now();
+          const res = await fetch(url, Object.assign({ cache:'no-store', credentials:'same-origin' }, init||{}));
+          if (!res.ok) throw new Error('HTTP '+res.status);
+          return await res.json();
+        }catch(e){ last = e; }
+      }
+      throw last || new Error('fetch fail');
+    }
+
+    // ===== API =====
+    const API = {
+      async list(){ return await fetchJsonWithFallback(window.ZANGE_API_BASES, { method:'GET' }); }
+    };
+
+    // ===== コメント（localStorage保存：キーは投稿ごと）=====
+    function commentsKey(id){ return `zange_comments_${id}`; }
+    function loadComments(id){
+      try { return JSON.parse(localStorage.getItem(commentsKey(id))||'[]'); }
+      catch { return []; }
+    }
+    function saveComment(id, item){
+      const arr = loadComments(id);
+      arr.push(item);
+      localStorage.setItem(commentsKey(id), JSON.stringify(arr));
+    }
+    function renderComments(id){
+      const listEl = document.getElementById('commentList');
+      const items = loadComments(id);
+      listEl.innerHTML = '';
+      if (!items.length){
+        listEl.classList.add('muted');
+        listEl.textContent = 'まだコメントはありません。';
+        return;
+      }
+      listEl.classList.remove('muted');
+      items.sort((a,b)=> String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
+      items.forEach(c=>{
+        const div = document.createElement('div');
+        div.className = 'comment-item';
+        div.innerHTML = `
+          <div>${esc(c.text)}</div>
+          <div class="comment-meta">by ${esc(c.user||'匿名')} ・ ${fmtDate(c.createdAt)}</div>
+        `;
+        listEl.appendChild(div);
+      });
+    }
+
+    // ===== 詳細描画 =====
+    function renderDetail(post){
+      // 旧描画先に簡易カード（互換）
+      const old = document.getElementById('detailCard');
+      if (old){
+        old.innerHTML = `
+          <div class="detail-hero" style="${post.bg ? `background-image:url('${esc(post.bg.startsWith('http')?post.bg:('/images/'+post.bg))}')` : ''}">
+            <div class="detail-title">${esc(post.text||'')}</div>
+          </div>
+          <div class="post-meta">
+            <span>by ${esc(post.author||'匿名')}</span>
+            ${post.target?`<span class="pill">対象: ${esc(post.target)}</span>`:''}
+            ${post.tag?`<span class="pill">タグ: ${esc(post.tag)}</span>`:''}
+            <span>${fmtDate(post.createdAt||post.created_at||post.date)}</span>
+            ${post.scope?`<span class="pill">公開: ${esc(post.scope)}</span>`:''}
+          </div>
+        `;
+      }
+
+      // 新描画先にも詳細（必要なら拡張しやすい）
+      const wrap = document.getElementById('detailContainer');
+      if (wrap){
+        const card = document.createElement('article');
+        card.className = 'card zange-post';
+        card.innerHTML = `
+          <div class="post-body" style="font-size:16px; line-height:1.8">${esc((post.text||'')).replace(/\n/g,'<br>')}</div>
+          <div class="post-meta" style="margin-top:8px">
+            <span class="post-author">by ${esc(post.author||'匿名')}</span>
+            ${post.target?`<span class="pill">対象: ${esc(post.target)}</span>`:''}
+            ${post.tag?`<span class="pill">タグ: ${esc(post.tag)}</span>`:''}
+            ${post.scope?`<span class="pill">公開: ${esc(post.scope)}</span>`:''}
+            <span>・${fmtDate(post.createdAt||post.created_at||post.date)}</span>
+            <button class="post-stamp-btn" type="button" data-id="${post.id||''}" aria-label="スタンプする">👏</button>
+          </div>
+        `;
+        wrap.innerHTML = '';
+        wrap.appendChild(card);
+      }
+    }
+
+    // ===== 入力ミラー（互換）=====
+    (function mirrorSetup(){
+      const nameOld = document.getElementById('commentUser');
+      const nameNew = document.getElementById('cName');
+      const textOld = document.getElementById('commentText');
+      const textNew = document.getElementById('cText');
+      function mirror(src, dst){ dst.value = src.value; }
+
+      if (nameOld && nameNew) {
+        nameOld.addEventListener('input', ()=> mirror(nameOld, nameNew));
+        nameNew.addEventListener('input', ()=> mirror(nameNew, nameOld));
+        if (!nameNew.value) nameNew.value = nameOld.value || '';
+      }
+      if (textOld && textNew) {
+        textOld.addEventListener('input', ()=> mirror(textOld, textNew));
+        textNew.addEventListener('input', ()=> mirror(textNew, textOld));
+        if (!textNew.value) textNew.value = textOld.value || '';
+      }
+    })();
+
+    // ===== メイン =====
+    (async function main(){
+      const idParam = q('id') || q('postId');
+      const detailCard = document.getElementById('detailCard');
+      const commentForm = document.getElementById('commentForm');
+      const commentNote = document.getElementById('commentNote');
+
+      if (!idParam){
+        detailCard.innerHTML = '<div class="muted">投稿IDが指定されていません。</div>';
+        commentForm.style.display = 'none';
+        commentNote.textContent = '※ 投稿が見つからないためコメントはできません。';
+        return;
+      }
+
+      let posts = [];
+      try{
+        posts = await API.list();
+      }catch(e){
+        detailCard.innerHTML = `<div class="muted">投稿の取得に失敗しました（${e?.message||'エラー'}）。</div>`;
+        commentForm.style.display = 'none';
+        commentNote.textContent = '※ 投稿が取得できないためコメントはできません。';
+        return;
+      }
+
+      // id は数値 or 文字列どちらでも一致させる
+      const post = posts.find(p => String(p.id) === String(idParam));
+      if (!post){
+        detailCard.innerHTML = '<div class="muted">該当の投稿が見つかりませんでした。</div>';
+        commentForm.style.display = 'none';
+        commentNote.textContent = '※ 投稿が見つからないためコメントはできません。';
+        return;
+      }
+
+      renderDetail(post);
+
+      // 公開範囲チェック
+      const isPublic = (post.scope || 'public') === 'public';
+      if (!isPublic){
+        commentForm.style.display = 'none';
+        commentNote.textContent = '※ 非公開投稿のためコメントはできません。';
+      }
+
+      // コメント表示
+      renderComments(post.id);
+
+      // 送信
+      commentForm.addEventListener('submit', (e)=>{
+        e.preventDefault();
+        if (!isPublic) return;
+
+        const user = (document.getElementById('commentUser')?.value || '匿名').trim();
+        const text = (document.getElementById('commentText')?.value || '').trim();
+        if (!text){ alert('コメントを入力してください'); return; }
+
+        saveComment(post.id, { user, text, createdAt: new Date().toISOString() });
+        (document.getElementById('commentText')||{}).value = '';
+        renderComments(post.id);
+      });
+    })();
+  </script>
+
+  <!-- モバイルタブバー -->
+  <footer class="mobile-tabbar">
+    <nav>
+      <a href="index.html"><span class="icon">🏠</span><span class="label">ホーム</span></a>
+      <a href="topics.html"><span class="icon">🎯</span><span class="label">お題</span></a>
+      <a href="notifications.html" class="nav-link nav-bell">
+        <span class="icon-row"><span class="icon">🔔</span><span id="notifBadge" class="notif-badge" aria-label="未読通知数"></span></span>
+        <span class="label">通知</span>
+      </a>
+      <a href="settings.html"><span class="icon">⚙️</span><span class="label">設定</span></a>
+      <a href="about.html"><span class="icon">📕</span><span class="label">概要</span></a>
+    </nav>
+  </footer>
+
+  <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
+</body>
+</html>
