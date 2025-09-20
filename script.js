@@ -981,3 +981,36 @@ document.addEventListener('DOMContentLoaded', ()=>{
     finishReactionsRender(card, z||{id:0,reactions:{}});
   });
 });
+// ===== サーバー側認証版 =====
+async function registerUser(email, pass, { nickname = "" } = {}) {
+  const res = await fetch("/api/signup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ email, password: pass, nickname })
+  });
+  const data = await res.json().catch(() => ({}));
+  return !!(res.ok && data.ok);
+}
+
+async function loginUser(email, pass) {
+  const res = await fetch("/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ email, password: pass })
+  });
+  const data = await res.json().catch(() => ({}));
+  return !!(res.ok && data.ok);
+}
+
+async function logoutUser() {
+  await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
+  return true;
+}
+
+async function fetchMe() {
+  const res = await fetch("/api/me", { credentials: "same-origin", cache: "no-store" });
+  const data = await res.json().catch(() => ({}));
+  return data && data.ok ? data.user : null;
+}
