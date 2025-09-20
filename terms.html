@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>zange - 利用規約</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* ページ固有の軽いスタイルのみ */
+    main { max-width: 720px; margin: 0 auto; padding: 16px; }
+    h2 { margin-top: 20px; font-size: 18px; border-left: 4px solid #cab8d9; padding-left: 8px; }
+    .card { margin-bottom: 16px; }
+    ol, ul { padding-left: 20px; }
+  </style>
+</head>
+<body>
+  <!-- 共通ヘッダー -->
+  <header>
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <h1><a href="index.html" style="text-decoration:none; color:inherit;">zange</a></h1>
+      <span id="currentUserIcon"></span>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>第1条（適用）</h2>
+      <p>本規約は、zange（以下「本サービス」）の利用条件を定めるものです。テストユーザーは本規約に同意の上でご利用ください。</p>
+    </section>
+
+    <section class="card">
+      <h2>第2条（禁止事項）</h2>
+      <p>利用者は、本サービスの利用にあたり、以下の行為を行ってはなりません。</p>
+      <ul>
+        <li>法令または公序良俗に違反する行為</li>
+        <li>他の利用者または第三者を誹謗中傷する行為</li>
+        <li>個人情報や機微情報を含む投稿</li>
+        <li>本サービスのアイデア・デザイン・仕組みを無断で複製・商用利用する行為（アイデアの盗用禁止）</li>
+        <li>その他、運営者が不適切と判断する行為</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>第3条（免責事項）</h2>
+      <ul>
+        <li>本サービスはテスト公開中であり、安定した提供を保証するものではありません。</li>
+        <li>利用中に発生した不具合、データ消失等について、運営者は一切の責任を負いません。</li>
+        <li>予告なくサービス内容の変更、停止または終了する場合があります。</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>第4条（知的財産権）</h2>
+      <p>本サービスに関する著作権、商標権その他の知的財産権は運営者に帰属します。利用者は運営者の許可なく、複製・転載・商用利用できません。</p>
+    </section>
+
+    <section class="card">
+      <h2>第5条（利用者の投稿）</h2>
+      <ul>
+        <li>投稿データの著作権は利用者に帰属します。</li>
+        <li>ただし、運営者は本サービスの改善・広報のために投稿内容を利用できるものとします。</li>
+        <li>不適切な投稿は運営者の判断により削除する場合があります。</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>第6条（準拠法）</h2>
+      <p>本規約は日本法を準拠法とし、日本の裁判所を第一審の専属的合意管轄裁判所とします。</p>
+    </section>
+
+    <section class="card">
+      <h2>附則</h2>
+      <p>本規約は2025年9月12日から施行します。</p>
+    </section>
+
+    <section class="card">
+      <h2>関連リンク</h2>
+      <ul>
+        <li><a href="about.html">zangeについて</a></li>
+        <li><a href="thought.html">サービス開発の思い</a></li>
+        <li><a href="privacy.html">プライバシーポリシー</a></li>
+        <li><a href="index.html">ホームに戻る</a></li>
+      </ul>
+    </section>
+  </main>
+
+  <!-- 共通フッター -->
+  <footer class="mobile-tabbar">
+    <nav>
+      <a href="index.html"><span class="icon">🏠</span><span class="label">ホーム</span></a>
+      <a href="topics.html"><span class="icon">🎯</span><span class="label">お題</span></a>
+      <a href="notifications.html" class="nav-link nav-bell">
+        <span class="icon-row"><span class="icon">🔔</span><span id="notifBadge" class="notif-badge" aria-label="未読通知数"></span></span>
+        <span class="label">通知</span>
+      </a>
+      <a href="settings.html"><span class="icon">⚙️</span><span class="label">設定</span></a>
+      <a href="about.html"><span class="icon">📕</span><span class="label">概要</span></a>
+    </nav>
+  </footer>
+
+  <!-- 投稿ボタン -->
+  <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
+
+  <footer>&copy; 2025 zange (テスト公開中)</footer>
+</body>
+</html>
