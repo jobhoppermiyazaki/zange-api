@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>zange - サービス開発の思い</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" href="favicon.ico" />
+  <style>
+    /* 既存スタイルは維持。note埋め込み用の最小追加だけ */
+    .note-embed-wrap iframe{
+      width:100%; height:620px; border:1px solid #eee; border-radius:12px;
+      background:#fff;
+    }
+    .embed-skeleton{
+      width:100%; height:180px; border-radius:12px;
+      background:linear-gradient(90deg,#f6f7f8 0%,#f0f0f0 50%,#f6f7f8 100%);
+      animation: shimmer 1.2s infinite linear; margin:8px 0;
+    }
+    @keyframes shimmer{
+      0%{background-position:-200px 0}
+      100%{background-position:200px 0}
+    }
+    .note-fallback{
+      background:#fff; border:1px solid #eee; border-radius:12px; padding:16px;
+    }
+    .hero-subbar { background:#fff; border-bottom:1px solid #eee; padding:12px 16px; }
+    .container { max-width: 960px; margin: 0 auto; padding: 0 16px; }
+    .stack { max-width: 720px; margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <!-- 共通ヘッダー -->
+  <header>
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <h1><a href="index.html" style="text-decoration:none; color:inherit;">zange</a></h1>
+      <span id="currentUserIcon"></span>
+    </div>
+  </header>
+
+  <!-- ページ見出し -->
+  <header class="hero-subbar">
+    <div class="container">
+      <h1>サービス開発の思い</h1>
+    </div>
+  </header>
+
+  <main class="container" style="margin-top:14px;margin-bottom:24px;">
+    <div class="stack">
+      <section class="card related-links">
+        <h2>開発背景</h2>
+        <p>人は時に、相手を傷つけない為に嘘をついたり、自分を守る為に嘘をついたり、誤魔化したり、自分の気持ちを抑え込んだり、意図せず約束を破ってしまうこともあります。</p>
+        <p>私はその度に自分の中でモヤモヤしたり、後悔をしてしまうことが多々あります。</p>
+        <p>モヤモヤや後悔をブログ・SNSに書き綴ることはできますが、
+          内容が重たくなったり、読み手によって意味をかけ違えられて炎上につながる可能性もあります。
+          それを考えるとストレスになり、気軽にブログやSNSを使えないこともあります。</p>
+        <p>そこで、モヤモヤや後悔を「ライトに、ポップに投稿（吐き出す）する機会」と「投稿を暖かく見守ってくれる場所」を作りたいと考える様になりました。</p>
+        <p>その機会と場所を「zange」というサービスを作り・提供することで実現したいと考えました。</p>
+
+        <h2>サービス開発の思い</h2>
+        <p>投稿者が従来の懺悔という重苦しい行為ではなく、ポップに投稿することでエンタメに昇華させ、気持ちが軽くなり、前向きになれる様にしたいと考えています。</p>
+        <p>zangeで投稿する内容は、自分ルールを破ったことや、小さな嘘など、どんな些細なモヤモヤや後悔でもOKです。</p>
+        <p>また、zangeを見た人は「ナイスzange！」「それ、わかる！」と共感したり、友達や家族、パートナーとの日常会話やネタになると嬉しいなーと願っています。</p>
+        <p>そんな「くだらないけど、見て・投稿して・ネタにしてみんながスッキリできる場所」を作り続けたいと思っています。</p>
+      </section>
+    </div>
+  </main>
+
+  <!-- 関連リンク -->
+  <div class="stack">
+    <section class="card related-links">
+      <h2>関連リンク</h2>
+      <ul class="bullet-links">
+        <li><a href="about.html">zangeについて</a></li>
+        <li><a href="terms.html">利用規約</a></li>
+        <li><a href="privacy.html">プライバシーポリシー</a></li>
+        <li><a href="index.html">ホームに戻る</a></li>
+      </ul>
+    </section>
+  </div>
+
+  <!-- モバイル下部ナビ -->
+  <footer class="mobile-tabbar">
+    <nav>
+      <a href="index.html"><span class="icon">🏠</span><span class="label">ホーム</span></a>
+      <a href="topics.html"><span class="icon">🎯</span><span class="label">お題</span></a>
+      <a href="notifications.html" class="nav-link nav-bell">
+        <span class="icon-row"><span class="icon">🔔</span><span id="notifBadge" class="notif-badge" aria-label="未読通知数"></span></span>
+        <span class="label">通知</span>
+      </a>
+      <a href="settings.html"><span class="icon">⚙️</span><span class="label">設定</span></a>
+      <a href="about.html"><span class="icon">📕</span><span class="label">概要</span></a>
+    </nav>
+  </footer>
+
+  <!-- 投稿ボタン（共通） -->
+  <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
+
+  <footer>&copy; 2025 zange (テスト公開中)</footer>
+</body>
+</html>
