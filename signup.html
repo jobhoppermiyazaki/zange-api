@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>新規登録 - zange</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    main{max-width:520px;margin:24px auto;padding:16px}
+    .signup-card{
+      background:#fff; border-radius:16px; box-shadow:0 8px 24px rgba(16,24,40,.06);
+      padding:24px;
+    }
+    .field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+    .field label{font-weight:700}
+    input{
+      padding:12px 14px; border:1px solid #e5e7eb; border-radius:12px;
+      font-size:16px; background:#fff;
+    }
+    button{
+      display:block; width:100%; margin-top:12px;
+      padding:14px 16px; border-radius:999px; border:0;
+      background:#cab8d9; color:#fff; font-weight:700;
+      box-shadow:0 8px 20px rgba(202,184,217,.35); cursor:pointer;
+    }
+    .auth-links{margin-top:10px; font-size:14px;}
+    .auth-links a{color:#2563eb; text-decoration:none;}
+    .auth-links a:hover{text-decoration:underline;}
+    .legal-links{margin-top:16px;text-align:center;font-size:13px;color:#555;}
+  </style>
+</head>
+<body>
+  <!-- 共通ヘッダー -->
+  <header>
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <h1><a href="index.html" style="text-decoration:none; color:inherit;">zange</a></h1>
+      <span id="currentUserIcon"></span>
+    </div>
+  </header>
+
+  <main>
+    <div class="signup-card">
+      <h2 style="margin:0 0 10px; font-size:18px;">新規登録</h2>
+      <form id="signupForm" novalidate>
+        <div class="field">
+          <label for="suEmail">メールアドレス</label>
+          <input id="suEmail" type="email" placeholder="you@example.com" required>
+        </div>
+
+        <div class="field">
+          <label for="suPass">パスワード</label>
+          <input id="suPass" type="password" placeholder="8文字以上が目安" minlength="8" required>
+        </div>
+
+        <div class="field">
+          <label for="nickname">ニックネーム</label>
+          <input type="text" id="nickname" name="nickname" placeholder="zange太郎" required>
+        </div>
+
+        <button type="submit" id="signupSubmit">登録する</button>
+      </form>
+
+      <p class="auth-links"><a href="login.html">既にアカウントをお持ちの方はこちら</a></p>
+    </div>
+
+    <!-- 規約リンク -->
+    <div class="legal-links">
+      <a href="about.html">サービス概要</a> ｜ 
+      <a href="terms.html">利用規約</a> ｜ 
+      <a href="privacy.html">プライバシーポリシー</a>
+      <p style="margin:6px 0 0;">© 2025 zange（テスト公開中）</p>
+    </div>
+  </main>
+
+  <script src="script.js"></script>
+  <script>
+    // ---- フォールバック版 registerUser ----
+    function fallbackRegisterUser(email, pass, { nickname }) {
+      if (!email || !pass || !nickname) return false;
+      try {
+        const users = JSON.parse(localStorage.getItem('zange_users') || '[]');
+        if (users.find(u => u.email === email)) return false; // 重複登録不可
+        users.push({ email, pass, nickname });
+        localStorage.setItem('zange_users', JSON.stringify(users));
+        localStorage.setItem('zange_current_user', JSON.stringify({ email, nickname }));
+        return true;
+      } catch { return false; }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const form = document.getElementById("signupForm");
+      form?.addEventListener("submit", (e) => {
+        e.preventDefault();
+
+        const email = document.getElementById('suEmail').value.trim();
+        const pass  = document.getElementById('suPass').value.trim();
+        const name  = document.getElementById('nickname').value.trim();
+
+        if (!email || !pass || !name) {
+          alert('メール・パスワード・ニックネームを入力してください');
+          return;
+        }
+        if (pass.length < 8) {
+          alert('パスワードは8文字以上を入力してください');
+          return;
+        }
+
+        let ok = false;
+        try {
+          if (typeof registerUser === 'function') {
+            ok = !!registerUser(email, pass, { nickname: name });
+          } else {
+            ok = fallbackRegisterUser(email, pass, { nickname: name });
+          }
+        } catch {
+          ok = fallbackRegisterUser(email, pass, { nickname: name });
+        }
+
+        if (ok) {
+          alert('登録しました！');
+          location.href = 'index.html';
+        } else {
+          alert('登録に失敗しました（既に登録済みかもしれません）');
+        }
+      });
+    });
+  </script>
+</body>
+</html>
