@@ -19,7 +19,7 @@
     .comment-meta{ font-size:12px; color:#6b7280; margin-top:4px }
   </style>
   <script>
-    // 同一オリジン優先（Render想定）→ 相対 → ルート
+    /* 同一オリジン優先（Render想定）→ 相対 → ルート */
     window.ZANGE_API_BASES = [
       location.origin.replace(/\/+$/,'') + '/api/posts',
       'api/posts',
@@ -62,7 +62,7 @@
 
   <script src="script.js"></script>
   <script>
-    // ===== ユーティリティ =====
+    /* ===== ユーティリティ ===== */
     function fmtDate(iso){
       if (typeof formatDate === 'function') return formatDate(iso);
       try {
@@ -83,7 +83,7 @@
       for (const u of urls){
         try{
           const url = u + (u.includes('?')?'&':'?') + '_t='+Date.now();
-          const res = await fetch(url, Object.assign({ cache:'no-store', credentials:'same-origin' }, init||{}));
+          const res = await fetch(url, Object.assign({ cache:'no-store', credentials:'omit' }, init||{}));
           if (!res.ok) throw new Error('HTTP '+res.status);
           return await res.json();
         }catch(e){ last = e; }
@@ -91,25 +91,61 @@
       throw last || new Error('fetch fail');
     }
 
-    // ===== API =====
+    /* ===== Posts API ===== */
     const API = {
       async list(){ return await fetchJsonWithFallback(window.ZANGE_API_BASES, { method:'GET' }); }
     };
 
-    // ===== コメント（localStorage保存：キーは投稿ごと）=====
+    /* ===== Comments API ベースURL（posts と同様にフォールバック構成） ===== */
+    const COMMENTS_BASES = (window.ZANGE_API_BASES || [])
+      .map(u => u.replace(/\/posts(\?.*)?$/,'/comments'))
+      .concat([
+        location.origin.replace(/\/+$/,'') + '/api/comments',
+        'api/comments',
+        '/api/comments'
+      ])
+      .filter(Boolean);
+
+    async function listCommentsFromServer(postId){
+      const qs = `?postId=${encodeURIComponent(postId)}`;
+      return await fetchJsonWithFallback(COMMENTS_BASES.map(u=>u+qs), { method:'GET' });
+    }
+    async function addCommentToServer(postId, user, text){
+      const body = JSON.stringify({ postId, user, text });
+      // POST は全BASEを順に試す
+      let last;
+      for (const base of COMMENTS_BASES){
+        try{
+          const u = base + (base.includes('?')?'&':'?') + '_t='+Date.now();
+          const res = await fetch(u, {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body,
+            cache:'no-store',
+            credentials:'omit'
+          });
+          if (!res.ok) throw new Error('HTTP '+res.status);
+          return await res.json();
+        }catch(e){ last = e; }
+      }
+      throw last || new Error('post comment failed');
+    }
+
+    /* ===== localStorage フォールバック（従来互換のため残す） ===== */
     function commentsKey(id){ return `zange_comments_${id}`; }
-    function loadComments(id){
+    function loadCommentsLocal(id){
       try { return JSON.parse(localStorage.getItem(commentsKey(id))||'[]'); }
       catch { return []; }
     }
-    function saveComment(id, item){
-      const arr = loadComments(id);
+    function saveCommentLocal(id, item){
+      const arr = loadCommentsLocal(id);
       arr.push(item);
       localStorage.setItem(commentsKey(id), JSON.stringify(arr));
     }
-    function renderComments(id){
+
+    /* ===== コメント描画 ===== */
+    function renderCommentsList(items){
       const listEl = document.getElementById('commentList');
-      const items = loadComments(id);
       listEl.innerHTML = '';
       if (!items.length){
         listEl.classList.add('muted');
@@ -117,7 +153,6 @@
         return;
       }
       listEl.classList.remove('muted');
-      items.sort((a,b)=> String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
       items.forEach(c=>{
         const div = document.createElement('div');
         div.className = 'comment-item';
@@ -129,9 +164,23 @@
       });
     }
 
-    // ===== 詳細描画 =====
+    async function renderComments(postId){
+      // 1) サーバー優先
+      try{
+        const server = await listCommentsFromServer(postId); // ASCで返す実装
+        renderCommentsList(server);
+        // ローカルにも同期しておく（任意）
+        try { localStorage.setItem(commentsKey(postId), JSON.stringify(server)); } catch {}
+        return;
+      }catch(e){
+        // 2) フォールバック：localStorage
+        const local = loadCommentsLocal(postId).sort((a,b)=>String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
+        renderCommentsList(local);
+      }
+    }
+
+    /* ===== 詳細描画 ===== */
     function renderDetail(post){
-      // 旧描画先に簡易カード（互換）
       const old = document.getElementById('detailCard');
       if (old){
         old.innerHTML = `
@@ -148,7 +197,6 @@
         `;
       }
 
-      // 新描画先にも詳細（必要なら拡張しやすい）
       const wrap = document.getElementById('detailContainer');
       if (wrap){
         const card = document.createElement('article');
@@ -169,7 +217,7 @@
       }
     }
 
-    // ===== 入力ミラー（互換）=====
+    /* ===== 入力ミラー（互換維持） ===== */
     (function mirrorSetup(){
       const nameOld = document.getElementById('commentUser');
       const nameNew = document.getElementById('cName');
@@ -189,7 +237,7 @@
       }
     })();
 
-    // ===== メイン =====
+    /* ===== メイン ===== */
     (async function main(){
       const idParam = q('id') || q('postId');
       const detailCard = document.getElementById('detailCard');
@@ -213,7 +261,6 @@
         return;
       }
 
-      // id は数値 or 文字列どちらでも一致させる
       const post = posts.find(p => String(p.id) === String(idParam));
       if (!post){
         detailCard.innerHTML = '<div class="muted">該当の投稿が見つかりませんでした。</div>';
@@ -224,18 +271,17 @@
 
       renderDetail(post);
 
-      // 公開範囲チェック
       const isPublic = (post.scope || 'public') === 'public';
       if (!isPublic){
         commentForm.style.display = 'none';
         commentNote.textContent = '※ 非公開投稿のためコメントはできません。';
       }
 
-      // コメント表示
-      renderComments(post.id);
+      // 初期表示：サーバー優先 → 失敗時ローカル
+      await renderComments(post.id);
 
       // 送信
-      commentForm.addEventListener('submit', (e)=>{
+      commentForm.addEventListener('submit', async (e)=>{
         e.preventDefault();
         if (!isPublic) return;
 
@@ -243,9 +289,18 @@
         const text = (document.getElementById('commentText')?.value || '').trim();
         if (!text){ alert('コメントを入力してください'); return; }
 
-        saveComment(post.id, { user, text, createdAt: new Date().toISOString() });
+        // 1) まずサーバーへ
+        try{
+          await addCommentToServer(post.id, user || '匿名', text);
+        }catch(e){
+          // 2) サーバー失敗時はローカルへフォールバック
+          console.warn('comment POST failed, fallback to local:', e?.message || e);
+          saveCommentLocal(post.id, { user: user||'匿名', text, createdAt: new Date().toISOString() });
+        }
+
+        // 入力クリア & 再読込（サーバー優先）
         (document.getElementById('commentText')||{}).value = '';
-        renderComments(post.id);
+        await renderComments(post.id);
       });
     })();
   </script>
