@@ -1,35 +1,41 @@
-# app.py（認証機能 追記版）
+# app.py
 from flask import Flask, request, jsonify, send_from_directory, session
 from flask_cors import CORS
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
-import sqlite3, os, threading
+import sqlite3, os, threading, secrets
 
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(APP_ROOT, "data.sqlite3")
 
 app = Flask(__name__, static_folder='.', static_url_path='')
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+# 将来クッキーを跨いで使う場合に備えて credentials を許可
+CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 
 # ===== セッション鍵（本番は環境変数で） =====
-app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
-# 可能ならセキュアCookie
-if os.environ.get("RENDER"):  # Render環境を想定
-    app.config.update(
-        SESSION_COOKIE_SAMESITE="Lax",
-        SESSION_COOKIE_SECURE=True
-    )
+app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+)
+# Render/https なら Secure をON
+if os.environ.get("RENDER"):
+    app.config["SESSION_COOKIE_SECURE"] = True
 
 _lock = threading.Lock()
 
 def _conn():
     con = sqlite3.connect(DB_PATH, check_same_thread=False)
     con.row_factory = sqlite3.Row
+    # 外部キー有効化
+    con.execute("PRAGMA foreign_keys = ON;")
     return con
 
 def _init_db():
     with _lock, _conn() as con:
-        # 投稿テーブル（既存）
+        # 投稿
         con.execute("""
         CREATE TABLE IF NOT EXISTS posts (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,7 +48,7 @@ def _init_db():
           createdAt TEXT
         )
         """)
-        # コメントテーブル（既存・新規）
+        # コメント
         con.execute("""
         CREATE TABLE IF NOT EXISTS comments (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,15 +59,23 @@ def _init_db():
           FOREIGN KEY(postId) REFERENCES posts(id)
         )
         """)
-        # ★ ユーザーテーブル（新規）
+        # ユーザー
         con.execute("""
         CREATE TABLE IF NOT EXISTS users (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           email TEXT UNIQUE NOT NULL,
           password_hash TEXT NOT NULL,
-          nickname TEXT
+          nickname TEXT,
+          createdAt TEXT
         )
         """)
+
+        # 既存DBに users.createdAt が無い場合に追加（簡易マイグレーション）
+        try:
+            con.execute("SELECT createdAt FROM users LIMIT 1;")
+        except sqlite3.OperationalError:
+            con.execute("ALTER TABLE users ADD COLUMN createdAt TEXT;")
+
         con.commit()
 
 _init_db()
@@ -76,78 +90,75 @@ def no_store(resp):
 def root():
     return send_from_directory(".", "index.html")
 
-# -------------------------------------------------
-#  Users API（新規：サーバー側でログイン状態を管理）
-# -------------------------------------------------
+# ========== ユーザー/認証 ==========
+def _current_user():
+    uid = session.get("uid")
+    if not uid:
+        return None
+    with _lock, _conn() as con:
+        row = con.execute(
+            "SELECT id,email,nickname,createdAt FROM users WHERE id=?", (uid,)
+        ).fetchone()
+        return dict(row) if row else None
+
 @app.post("/api/signup")
 def api_signup():
-    data = request.get_json(force=True, silent=True) or {}
+    data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     password = (data.get("password") or "").strip()
-    nickname = (data.get("nickname") or "").strip()
+    nickname = (data.get("nickname") or "").strip() or None
 
     if not email or not password:
         return jsonify({"ok": False, "error": "email and password required"}), 400
     if len(password) < 8:
         return jsonify({"ok": False, "error": "password too short"}), 400
 
-    with _lock, _conn() as con:
-        try:
-            con.execute(
-                "INSERT INTO users(email, password_hash, nickname) VALUES (?,?,?)",
-                (email, generate_password_hash(password), nickname)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    try:
+        with _lock, _conn() as con:
+            cur = con.execute(
+                "INSERT INTO users(email, password_hash, nickname, createdAt) VALUES (?,?,?,?)",
+                (email, generate_password_hash(password), nickname, now_iso)
             )
+            uid = cur.lastrowid
             con.commit()
-            cur = con.execute("SELECT id, nickname FROM users WHERE email=?", (email,))
-            row = cur.fetchone()
-        except sqlite3.IntegrityError:
-            return jsonify({"ok": False, "error": "already exists"}), 409
+    except sqlite3.IntegrityError:
+        return jsonify({"ok": False, "error": "already exists"}), 409
 
-    # そのままログイン状態にする
-    session["uid"] = row["id"]
-    session["email"] = email
-    session["nickname"] = row["nickname"] or ""
-    return jsonify({"ok": True})
+    session["uid"] = uid
+    user = {"id": uid, "email": email, "nickname": nickname, "createdAt": now_iso}
+    return jsonify({"ok": True, "user": user}), 201
 
 @app.post("/api/login")
 def api_login():
-    data = request.get_json(force=True, silent=True) or {}
+    data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     password = (data.get("password") or "").strip()
 
     with _lock, _conn() as con:
-        cur = con.execute("SELECT id, password_hash, nickname FROM users WHERE email=?", (email,))
-        row = cur.fetchone()
+        row = con.execute(
+            "SELECT id,email,password_hash,nickname,createdAt FROM users WHERE email=?",
+            (email,)
+        ).fetchone()
 
     if not row or not check_password_hash(row["password_hash"], password):
         return jsonify({"ok": False, "error": "invalid credentials"}), 401
 
     session["uid"] = row["id"]
-    session["email"] = email
-    session["nickname"] = row["nickname"] or ""
-    return jsonify({"ok": True})
+    user = {"id": row["id"], "email": row["email"], "nickname": row["nickname"], "createdAt": row["createdAt"]}
+    return jsonify({"ok": True, "user": user}), 200
 
 @app.post("/api/logout")
 def api_logout():
     session.clear()
-    return jsonify({"ok": True})
+    return jsonify({"ok": True}), 200
 
 @app.get("/api/me")
 def api_me():
-    if "uid" in session:
-        return jsonify({
-            "ok": True,
-            "user": {
-                "id": session["uid"],
-                "email": session.get("email", ""),
-                "nickname": session.get("nickname", "")
-            }
-        })
-    return jsonify({"ok": False, "user": None}), 401
+    user = _current_user()
+    return jsonify({"ok": bool(user), "user": user}), 200
 
-# -------------------------------------------------
-#  Posts API（既存）
-# -------------------------------------------------
+# ========== Posts ==========
 @app.get("/api/posts")
 def list_posts():
     with _lock, _conn() as con:
@@ -174,13 +185,10 @@ def add_post():
         )
         new_id = cur.lastrowid
         con.commit()
-        cur = con.execute("SELECT * FROM posts WHERE id=?", (new_id,))
-        row = dict(cur.fetchone())
+        row = dict(con.execute("SELECT * FROM posts WHERE id=?", (new_id,)).fetchone())
     return jsonify(row), 201
 
-# -------------------------------------------------
-#  Comments API（既存：サーバー保存）
-# -------------------------------------------------
+# ========== Comments ==========
 @app.get("/api/comments")
 def list_comments():
     """?postId= を付けて呼ぶ想定。未指定なら新しい順で全件（テスト用）"""
@@ -208,7 +216,6 @@ def add_comment():
         return jsonify({"error": "text is required"}), 400
     now_iso = datetime.now(timezone.utc).isoformat()
     with _lock, _conn() as con:
-        # 対象投稿の存在チェック（簡易）
         chk = con.execute("SELECT 1 FROM posts WHERE id=?", (post_id,)).fetchone()
         if not chk:
             return jsonify({"error": "post not found"}), 404
@@ -220,6 +227,11 @@ def add_comment():
         con.commit()
         row = dict(con.execute("SELECT * FROM comments WHERE id=?", (new_id,)).fetchone())
     return jsonify(row), 201
+
+# ヘルスチェック（任意）
+@app.get("/api/health")
+def health():
+    return jsonify({"ok": True}), 200
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 3000))
