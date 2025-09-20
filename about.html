@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>このサービスについて - zange</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body { font-family: system-ui, sans-serif; line-height: 1.7; background: #f9fafb; margin: 0; color: #333; }
+    header { background: #fff; border-bottom: 1px solid #eee; padding: 12px 16px; position: sticky; top: 0; }
+    header h1 { font-size: 18px; margin: 0; }
+    main { max-width: 720px; margin: 0 auto; padding: 20px; }
+    h2 { margin-top: 24px; font-size: 18px; border-left: 4px solid #cab8d9; padding-left: 8px; }
+    ul { padding-left: 20px; }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); padding: 20px; margin-bottom: 16px; }
+    footer { margin-top: 40px; padding: 16px; font-size: 12px; text-align: center; color: #666; }
+    a { color: #2563eb; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="inner">
+      <div class="h-left">
+        <a class="logo" href="index.html">zange</a>
+      </div>
+      <div class="h-right">
+        <div id="currentUserIcon" class="user-ico"></div>
+      </div>
+    </div>
+  </header>
+  <header>
+    <h1>zangeについて</h1>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>サービス概要</h2>
+      <p><b>zange</b>は、日々のちょっとした後悔を投稿（zange）して、スタンプやコメントを通じて、みんなでポップに・エンタメに昇華させていくサービスです。</p>
+    </section>
+
+    <section class="card">
+      <h2>主な機能</h2>
+      <ul>
+        <li>ちょっとした後悔を投稿（対象者、タグ、背景画像を設定可能）</li>
+        <li>スタンプ（🙏 😂 🤝 🌱 ＋スタンプ）でのリアクション</li>
+        <li>投稿へのコメント</li>
+        <li>気になる人をフォロー</li>
+        <li>通知（スタンプ・コメント・フォローなど）</li>
+        <li>プロフィール設定（ニックネーム・自己紹介・アイコン画像）</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>使い方</h2>
+      <ol>
+        <li>ログインまたは新規登録を行います。</li>
+        <li>画面下部の「⚙️設定」ボタンから、自分のプロフィール設定や投稿内容の管理、フォロー状況を確認できます。</li>
+        <li>画面右下の「🙏」ボタンから投稿できます。</li>
+        <li>画面下部の「🏠ホーム」ボタンから他ユーザーの投稿閲覧、スタンプやコメントでリアクションできます。</li>
+        <li>画面下部の「🔔通知」ボタンから自分が投稿した内容へのスタンプやコメントがあった場合に表示されます。</li>
+        <li>画面下部の「🏠ホーム」ボタンから他ユーザーの投稿閲覧や検索、スタンプやコメントでリアクションできます。</li>
+        <li>画面下部の「🎯お題」ボタンからオススメの投稿するお題を見つけることができます。</li>
+        <li>画面下部の「📕概要」ボタンから、利用規約やプライバシーポリシーなどを確認できます。</li>
+      <li>ログインとログアウトは、画面右上のアイコン画面をクリックください。</li>
+    </ol>
+    </section>
+
+    <section class="card">
+      <h2>注意事項（テスト版）</h2>
+      <ul>
+        <li>本サービスは現在テスト公開中です。予告なくデータが削除される場合があります。</li>
+        <li>投稿内容は運営者が確認できる場合があります。個人情報や機微な情報の投稿は避けてください。</li>
+        <li>サービスのアイデアやデザインを無断で複製・商用利用することは禁止します。</li>
+        <li>ご利用にあたり問題や改善点に気づいた場合はフィードバックいただけると助かります。</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>関連リンク</h2>
+      <ul>
+        <li><a href="thought.html">サービス開発の思い</a></li>
+        <li><a href="terms.html">利用規約</a></li>
+        <li><a href="privacy.html">プライバシーポリシー</a></li>
+        <li><a href="index.html">ホームに戻る</a></li>
+      </ul>
+    </section>
+  </main>
+  <footer class="mobile-tabbar">
+    <nav>
+      <a href="index.html">
+        <span class="icon">🏠</span>
+        <span class="label">ホーム</span>
+      </a>
+      <a href="topics.html">
+        <span class="icon">🎯</span>
+        <span class="label">お題</span>
+      </a>
+      <a href="notifications.html" class="nav-link nav-bell">
+        <span class="icon-row">
+          <span class="icon">🔔</span>
+          <span id="notifBadge" class="notif-badge" aria-label="未読通知数"></span>
+        </span>
+        <span class="label">通知</span>
+      </a>
+      <a href="settings.html">
+        <span class="icon">⚙️</span>
+        <span class="label">設定</span>
+      </a>
+      <a href="about.html">
+        <span class="icon">📕</span>
+        <span class="label">概要</span>
+      </a>
+    </nav>
+  </footer>
+  <!-- 右下の投稿FAB（post.html以外で出すのがオススメ） -->
+  <a class="fab" href="post.html">
+    <span class="emoji">🙏</span>
+  </a>
+  <footer>
+    &copy; 2025 zange (テスト公開中)
+  </footer>
+</body>
+</html>
