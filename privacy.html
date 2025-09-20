@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>プライバシーポリシー - zange</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body { font-family: system-ui, sans-serif; line-height: 1.7; background: #f9fafb; margin: 0; color: #333; }
+    header { background: #fff; border-bottom: 1px solid #eee; padding: 12px 16px; position: sticky; top: 0; }
+    header h1 { font-size: 18px; margin: 0; }
+    main { max-width: 720px; margin: 0 auto; padding: 20px; }
+    h2 { margin-top: 24px; font-size: 18px; border-left: 4px solid #cab8d9; padding-left: 8px; }
+    ul { padding-left: 20px; }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); padding: 20px; margin-bottom: 16px; }
+    footer { margin-top: 40px; padding: 16px; font-size: 12px; text-align: center; color: #666; }
+    a { color: #2563eb; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="inner">
+      <div class="h-left">
+        <a class="logo" href="index.html">zange</a>
+      </div>
+      <div class="h-right">
+        <div id="currentUserIcon" class="user-ico"></div>
+      </div>
+    </div>
+  </header>
+  <header>
+    <h1>プライバシーポリシー</h1>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>第1条（基本方針）</h2>
+      <p>本サービス（zange）は、テストユーザーの皆さまの個人情報を尊重し、プライバシー保護を最優先とします。本ポリシーはテスト公開中のサービスに適用されます。</p>
+    </section>
+
+    <section class="card">
+      <h2>第2条（収集する情報）</h2>
+      <p>本サービスが収集する情報は以下のとおりです。</p>
+      <ul>
+        <li>登録時のメールアドレス・パスワード</li>
+        <li>ニックネーム・プロフィール画像など任意の情報</li>
+        <li>投稿内容およびリアクション（スタンプ・コメント等）</li>
+        <li>サービス利用状況（アクセス日時、端末情報など）</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>第3条（利用目的）</h2>
+      <ul>
+        <li>サービスの提供および改善のため</li>
+        <li>不具合や不正利用の調査・対応のため</li>
+        <li>利用者への連絡（重要なお知らせ等）</li>
+        <li>テスト利用に関するフィードバック収集のため</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>第4条（第三者提供）</h2>
+      <p>本サービスは、法令に基づく場合を除き、利用者の同意なく個人情報を第三者に提供しません。</p>
+    </section>
+
+    <section class="card">
+      <h2>第5条（情報の管理）</h2>
+      <ul>
+        <li>収集した情報は、ローカルストレージ等を利用して安全に管理します。</li>
+        <li>テスト公開中のため、データが消失する可能性があります。あらかじめご了承ください。</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>第6条（利用者の権利）</h2>
+      <ul>
+        <li>利用者は、自身のプロフィールを編集・削除できます。</li>
+        <li>アカウント削除を希望する場合は、運営者にご連絡ください。</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>第7条（免責事項）</h2>
+      <p>本サービスはテスト運用中であり、完全なセキュリティや安定した運用を保証するものではありません。利用により発生したトラブルについて、運営者は一切の責任を負いません。</p>
+    </section>
+
+    <section class="card">
+      <h2>第8条（改定）</h2>
+      <p>本ポリシーは必要に応じて改定することがあります。改定後の内容は本ページに掲載した時点から効力を生じます。</p>
+    </section>
+
+    <section class="card">
+      <h2>附則</h2>
+      <p>本ポリシーは2025年9月12日から施行します。</p>
+    </section>
+
+    <section class="card">
+      <h2>関連リンク</h2>
+      <ul>
+        <li><a href="about.html">zangeについて</a></li>
+        <li><a href="thought.html">サービス開発の思い</a></li>
+        <li><a href="terms.html">利用規約</a></li>
+        <li><a href="index.html">ホームに戻る</a></li>
+      </ul>
+    </section>
+  </main>
+  <footer class="mobile-tabbar">
+    <nav>
+      <a href="index.html">
+        <span class="icon">🏠</span>
+        <span class="label">ホーム</span>
+      </a>
+      <a href="topics.html">
+        <span class="icon">🎯</span>
+        <span class="label">お題</span>
+      </a>
+      <a href="notifications.html" class="nav-link nav-bell">
+        <span class="icon-row">
+          <span class="icon">🔔</span>
+          <span id="notifBadge" class="notif-badge" aria-label="未読通知数"></span>
+        </span>
+        <span class="label">通知</span>
+      </a>
+      <a href="settings.html">
+        <span class="icon">⚙️</span>
+        <span class="label">設定</span>
+      </a>
+      <a href="about.html">
+        <span class="icon">📕</span>
+        <span class="label">概要</span>
+      </a>
+    </nav>
+  </footer>
+  <footer>
+    &copy; 2025 zange (テスト公開中)
+  </footer>
+</body>
+</html>
