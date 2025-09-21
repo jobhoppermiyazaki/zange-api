@@ -26,6 +26,7 @@
   <header>
     <div style="display:flex; align-items:center; justify-content:space-between;">
       <h1><a href="index.html" style="text-decoration:none; color:inherit;">zange</a></h1>
+      <!-- ログイン状態が表示される -->
       <span id="currentUserIcon"></span>
     </div>
   </header>
@@ -61,17 +62,12 @@
       <label>背景画像を選択</label>
       <input type="hidden" id="zangeBg" value="">
       <div class="bg-picker" id="bgPicker">
-        <!-- なし（初期選択扱い） -->
         <button type="button" class="bg-thumb bg-none selected" data-bg="" aria-label="背景なし">なし</button>
-
-        <!-- 既存 -->
         <button type="button" class="bg-thumb" data-bg="bg1.jpg" style="background-image:url('images/bg1.jpg')" aria-label="背景1"></button>
         <button type="button" class="bg-thumb" data-bg="bg2.jpg" style="background-image:url('images/bg2.jpg')" aria-label="背景2"></button>
         <button type="button" class="bg-thumb" data-bg="bg3.jpg" style="background-image:url('images/bg3.jpg')" aria-label="背景3"></button>
         <button type="button" class="bg-thumb" data-bg="bg4.jpg" style="background-image:url('images/bg4.jpg')" aria-label="背景4"></button>
         <button type="button" class="bg-thumb" data-bg="bg5.jpg" style="background-image:url('images/bg5.jpg')" aria-label="背景5"></button>
-
-        <!-- 追加 -->
         <button type="button" class="bg-thumb" data-bg="bg6.jpg" style="background-image:url('images/bg6.jpg')" aria-label="背景6"></button>
         <button type="button" class="bg-thumb" data-bg="bg7.jpg" style="background-image:url('images/bg7.jpg')" aria-label="背景7"></button>
         <button type="button" class="bg-thumb" data-bg="bg8.jpg" style="background-image:url('images/bg8.jpg')" aria-label="背景8"></button>
@@ -90,7 +86,6 @@
   </main>
 
   <script>
-    // ====== エンドポイント配列（固定URL→絶対→相対→ルート） ======
     const API_ENDPOINTS = [
       window.ZANGE_API_BASE,
       location.origin.replace(/\/+$/,'') + '/api/posts',
@@ -102,14 +97,13 @@
       let lastErr;
       for (const url of API_ENDPOINTS){
         try{
-          const u = url + (url.includes('?')?'&':'?') + '_t=' + Date.now(); // キャッシュ殺し
+          const u = url + (url.includes('?')?'&':'?') + '_t=' + Date.now();
           const res = await fetch(u, {
             method:'POST',
             headers:{'Content-Type':'application/json'},
             body: JSON.stringify(data),
             cache:'no-store',
-            // 同一オリジンなら same-origin、別オリジン（CORS）なら omit
-            credentials: url.startsWith(location.origin) ? 'same-origin' : 'omit'
+            credentials:'include'   // ← サーバーにセッションを送る
           });
           if (!res.ok) throw new Error('HTTP '+res.status);
           return await res.json();
@@ -118,7 +112,6 @@
       throw lastErr || new Error('API error');
     }
 
-    // localStorage フォールバック（indexのローカル表示と互換）
     function saveLocalFallback(post) {
       try {
         const key = 'zange_posts';
@@ -138,7 +131,6 @@
       } catch(e) { console.warn('local fallback failed:', e); }
     }
 
-    // 背景サムネ選択（仕様維持）
     (function setupBgPicker(){
       const picker = document.getElementById('bgPicker');
       const hidden = document.getElementById('zangeBg');
@@ -152,7 +144,6 @@
       });
     })();
 
-    // 送信（API優先→失敗時ローカル保存→indexへ戻る）
     (function setupSubmit(){
       const form = document.getElementById('postForm');
       const submitBtn = document.getElementById('submitBtn');
@@ -169,8 +160,8 @@
         if (!text){ alert('投稿内容を入力してください'); return; }
         if (!target){ alert('「誰に」を選択してください'); return; }
 
-        const author = ''; // 仕様上、未指定のまま（必要になればここに反映）
-        const payload = { text, author, target, tag, bg, scope };
+        const payload = { text, target, tag, bg, scope };
+        // authorは送らずサーバー側でsessionから補完
 
         const originalLabel = submitBtn.textContent;
         submitBtn.disabled = true;
@@ -189,9 +180,40 @@
         location.href = 'index.html';
       });
     })();
+
+    // ★ ログイン状態の表示を追加
+    async function renderUserIcon() {
+      const box = document.getElementById("currentUserIcon");
+      if (!box) return;
+      try {
+        const res = await fetch("/api/me", { credentials: "include", cache: "no-store" });
+        const data = await res.json();
+        if (data.ok && data.user) {
+          const name = data.user.nickname || data.user.email;
+          box.innerHTML = `
+            <span style="display:inline-flex;align-items:center;gap:8px;">
+              <span class="pill" style="padding:6px 10px;border-radius:999px;background:#f1f5f9;">
+                👤 ${escapeHTML(name)}
+              </span>
+              <button id="logoutBtn" style="padding:6px 10px;border-radius:10px;border:1px solid #e6e6e6;background:#fff;cursor:pointer">
+                ログアウト
+              </button>
+            </span>`;
+          document.getElementById("logoutBtn")?.addEventListener("click", async () => {
+            await fetch("/api/logout", { method: "POST", credentials: "include" });
+            renderUserIcon();
+          });
+        } else {
+          box.innerHTML = `<a href="login.html">ログイン</a>`;
+        }
+      } catch {
+        box.innerHTML = `<a href="login.html">ログイン</a>`;
+      }
+    }
+    function escapeHTML(s){ return (s||"").replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m])); }
+    document.addEventListener("DOMContentLoaded", renderUserIcon);
   </script>
 
-  <!-- フッター（5タブ仕様）＋FABは現状維持 -->
   <footer class="mobile-tabbar">
     <nav>
       <a href="index.html"><span class="icon">🏠</span><span class="label">ホーム</span></a>
