@@ -169,14 +169,19 @@ def list_posts():
 @app.post("/api/posts")
 def add_post():
     data = request.get_json(silent=True) or {}
-    text = (data.get("text") or "").strip()
-    author = (data.get("author") or "").strip()
+    text   = (data.get("text")   or "").strip()
     target = (data.get("target") or "").strip()
-    tag = (data.get("tag") or "").strip()
-    bg = (data.get("bg") or "").strip()
-    scope = (data.get("scope") or "public").strip()
+    tag    = (data.get("tag")    or "").strip()
+    bg     = (data.get("bg")     or "").strip()
+    scope  = (data.get("scope")  or "public").strip()
+
     if not text:
         return jsonify({"error": "text is required"}), 400
+
+    # ★ クライアントからの author は無視し、サーバーで決定
+    cu = _current_user()
+    author = (cu.get("nickname") if cu else None) or (cu.get("email") if cu else None) or "匿名"
+
     now_iso = datetime.now(timezone.utc).isoformat()
     with _lock, _conn() as con:
         cur = con.execute(
@@ -208,12 +213,17 @@ def list_comments():
 def add_comment():
     data = request.get_json(silent=True) or {}
     post_id = str(data.get("postId") or "").strip()
-    text = (data.get("text") or "").strip()
-    user = (data.get("user") or "匿名").strip()
+    text    = (data.get("text") or "").strip()
+
     if not post_id.isdigit():
         return jsonify({"error": "postId is required"}), 400
     if not text:
         return jsonify({"error": "text is required"}), 400
+
+    # ★ ログイン済みならニックネーム/メールを優先、未ログインなら「匿名」
+    cu = _current_user()
+    user = (cu.get("nickname") if cu else None) or (cu.get("email") if cu else None) or "匿名"
+
     now_iso = datetime.now(timezone.utc).isoformat()
     with _lock, _conn() as con:
         chk = con.execute("SELECT 1 FROM posts WHERE id=?", (post_id,)).fetchone()
