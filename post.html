@@ -103,7 +103,7 @@
             headers:{'Content-Type':'application/json'},
             body: JSON.stringify(data),
             cache:'no-store',
-            credentials:'include'   // ← サーバーにセッションを送る
+            credentials:'include'
           });
           if (!res.ok) throw new Error('HTTP '+res.status);
           return await res.json();
@@ -120,7 +120,7 @@
         arr.push({
           id: maxId + 1,
           text: post.text || "",
-          author: post.author || "匿名",
+          author: "匿名",  // ローカル保存時のみ匿名
           createdAt: new Date().toISOString(),
           target: post.target || "",
           tag: post.tag || "",
@@ -161,7 +161,7 @@
         if (!target){ alert('「誰に」を選択してください'); return; }
 
         const payload = { text, target, tag, bg, scope };
-        // authorは送らずサーバー側でsessionから補完
+        // authorは送らず、サーバーがsessionから補完
 
         const originalLabel = submitBtn.textContent;
         submitBtn.disabled = true;
