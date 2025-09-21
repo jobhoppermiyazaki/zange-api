@@ -62,8 +62,8 @@
         <li>画面下部の「🏠ホーム」ボタンから他ユーザーの投稿閲覧や検索、スタンプやコメントでリアクションできます。</li>
         <li>画面下部の「🎯お題」ボタンからオススメの投稿するお題を見つけることができます。</li>
         <li>画面下部の「📕概要」ボタンから、利用規約やプライバシーポリシーなどを確認できます。</li>
-      <li>ログインとログアウトは、画面右上のアイコン画面をクリックください。</li>
-    </ol>
+        <li>ログインとログアウトは、画面右上のアイコン画面をクリックください。</li>
+      </ol>
     </section>
 
     <section class="card">
@@ -86,16 +86,11 @@
       </ul>
     </section>
   </main>
+
   <footer class="mobile-tabbar">
     <nav>
-      <a href="index.html">
-        <span class="icon">🏠</span>
-        <span class="label">ホーム</span>
-      </a>
-      <a href="topics.html">
-        <span class="icon">🎯</span>
-        <span class="label">お題</span>
-      </a>
+      <a href="index.html"><span class="icon">🏠</span><span class="label">ホーム</span></a>
+      <a href="topics.html"><span class="icon">🎯</span><span class="label">お題</span></a>
       <a href="notifications.html" class="nav-link nav-bell">
         <span class="icon-row">
           <span class="icon">🔔</span>
@@ -103,20 +98,43 @@
         </span>
         <span class="label">通知</span>
       </a>
-      <a href="settings.html">
-        <span class="icon">⚙️</span>
-        <span class="label">設定</span>
-      </a>
-      <a href="about.html">
-        <span class="icon">📕</span>
-        <span class="label">概要</span>
-      </a>
+      <a href="settings.html"><span class="icon">⚙️</span><span class="label">設定</span></a>
+      <a href="about.html"><span class="icon">📕</span><span class="label">概要</span></a>
     </nav>
   </footer>
   <!-- 右下の投稿FAB（post.html以外で出すのがオススメ） -->
-  <a class="fab" href="post.html">
-    <span class="emoji">🙏</span>
-  </a>
+  <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
+
+  <!-- ログイン状態の表示（ヘッダー右上） -->
+  <script>
+    async function renderUserIcon(){
+      const box = document.getElementById("currentUserIcon");
+      if (!box) return;
+      try{
+        const res = await fetch("/api/me",{ credentials:"include", cache:"no-store" });
+        const data = await res.json();
+        if (data.ok && data.user){
+          const esc = s => (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m]));
+          const name = data.user.nickname || data.user.email;
+          box.innerHTML = `
+            <span style="display:inline-flex;align-items:center;gap:8px;">
+              <span class="pill" style="padding:6px 10px;border-radius:999px;background:#f1f5f9;">👤 ${esc(name)}</span>
+              <button id="logoutBtn" style="padding:6px 10px;border-radius:10px;border:1px solid #e6e6e6;background:#fff;cursor:pointer">ログアウト</button>
+            </span>`;
+          document.getElementById("logoutBtn")?.addEventListener("click", async()=>{
+            await fetch("/api/logout",{ method:"POST", credentials:"include" });
+            location.reload();
+          });
+        }else{
+          box.innerHTML = `<a href="login.html">ログイン</a>`;
+        }
+      }catch{
+        box.innerHTML = `<a href="login.html">ログイン</a>`;
+      }
+    }
+    document.addEventListener("DOMContentLoaded", renderUserIcon);
+  </script>
+
   <footer>
     &copy; 2025 zange (テスト公開中)
   </footer>
