@@ -6,7 +6,6 @@
   <title>zange - 利用規約</title>
   <link rel="stylesheet" href="style.css" />
   <style>
-    /* ページ固有の軽いスタイルのみ */
     main { max-width: 720px; margin: 0 auto; padding: 16px; }
     h2 { margin-top: 20px; font-size: 18px; border-left: 4px solid #cab8d9; padding-left: 8px; }
     .card { margin-bottom: 16px; }
@@ -100,6 +99,36 @@
 
   <!-- 投稿ボタン -->
   <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
+
+  <!-- ログイン状態の表示 -->
+  <script>
+    async function renderUserIcon(){
+      const box = document.getElementById("currentUserIcon");
+      if (!box) return;
+      try{
+        const res = await fetch("/api/me",{ credentials:"include", cache:"no-store" });
+        const data = await res.json();
+        if (data.ok && data.user){
+          const esc = s => (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m]));
+          const name = data.user.nickname || data.user.email;
+          box.innerHTML = `
+            <span style="display:inline-flex;align-items:center;gap:8px;">
+              <span class="pill" style="padding:6px 10px;border-radius:999px;background:#f1f5f9;">👤 ${esc(name)}</span>
+              <button id="logoutBtn" style="padding:6px 10px;border-radius:10px;border:1px solid #e6e6e6;background:#fff;cursor:pointer">ログアウト</button>
+            </span>`;
+          document.getElementById("logoutBtn")?.addEventListener("click", async()=>{
+            await fetch("/api/logout",{ method:"POST", credentials:"include" });
+            location.reload();
+          });
+        }else{
+          box.innerHTML = `<a href="login.html">ログイン</a>`;
+        }
+      }catch{
+        box.innerHTML = `<a href="login.html">ログイン</a>`;
+      }
+    }
+    document.addEventListener("DOMContentLoaded", renderUserIcon);
+  </script>
 
   <footer>&copy; 2025 zange (テスト公開中)</footer>
 </body>
