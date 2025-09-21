@@ -76,7 +76,7 @@
       return d.toLocaleString('ja-JP', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
     }
 
-    // ---- 未読バッジ 0 にする（script.js に更新関数があれば利用）----
+    // ---- 未読バッジ 0 にする ----
     function clearBadge() {
       if (typeof updateNotifBadge === 'function') {
         updateNotifBadge(0);
@@ -86,12 +86,11 @@
       }
     }
 
-    // ---- 既読化（script.js に markAllNotificationsRead があれば利用）----
+    // ---- 既読化 ----
     function markRead() {
       if (typeof markAllNotificationsRead === 'function') {
         try { markAllNotificationsRead(); } catch {}
       } else {
-        // 簡易な既読マーキング（フォールバック）
         localStorage.setItem('zange_notifications_read_at', Date.now().toString());
       }
     }
@@ -130,10 +129,37 @@
           });
       }
 
-      // 既読処理＋バッジをクリア
       markRead();
       clearBadge();
     })();
+
+    // ===== ログイン状態の表示（ヘッダー右上） =====
+    async function renderUserIcon(){
+      const box = document.getElementById("currentUserIcon");
+      if (!box) return;
+      try{
+        const res = await fetch("/api/me",{ credentials:"include", cache:"no-store" });
+        const data = await res.json();
+        if (data.ok && data.user){
+          const esc = s => (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m]));
+          const name = data.user.nickname || data.user.email;
+          box.innerHTML = `
+            <span style="display:inline-flex;align-items:center;gap:8px;">
+              <span class="pill" style="padding:6px 10px;border-radius:999px;background:#f1f5f9;">👤 ${esc(name)}</span>
+              <button id="logoutBtn" style="padding:6px 10px;border-radius:10px;border:1px solid #e6e6e6;background:#fff;cursor:pointer">ログアウト</button>
+            </span>`;
+          document.getElementById("logoutBtn")?.addEventListener("click", async()=>{
+            await fetch("/api/logout",{ method:"POST", credentials:"include" });
+            renderUserIcon();
+          });
+        }else{
+          box.innerHTML = `<a href="login.html">ログイン</a>`;
+        }
+      }catch{
+        box.innerHTML = `<a href="login.html">ログイン</a>`;
+      }
+    }
+    document.addEventListener("DOMContentLoaded", renderUserIcon);
   </script>
 
   <footer>&copy; 2025 zange (テスト公開中)</footer>
