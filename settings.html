@@ -8,7 +8,6 @@
 
   <!-- Render の同一オリジン API を最優先に使う -->
   <script>
-    // 同一オリジン（Render）を最優先に。必要なら script.js 側でこの変数を参照します
     window.ZANGE_API_BASE = location.origin.replace(/\/+$/, '') + '/api/posts';
   </script>
 
@@ -32,17 +31,14 @@
     .muted{color:#8a8a8a}
     .pill{padding:6px 10px;border-radius:999px;background:#f1f5f9}
 
-    /* 自分の投稿：編集エリアは初期で非表示。編集時のみ表示 */
     .my-post .edit-area{margin-top:8px;display:none !important;}
     .my-post.editing .edit-area{display:block !important;}
 
-    /* プロフィール表示/編集の切替用（script.js が使う要素） */
     #profileView p{margin:2px 0}
     #profileView .name{font-weight:700;font-size:16px}
     #profileView .meta{font-size:13px;color:#6b7280}
     #profileView .bio{margin-top:4px}
 
-    /* ---- Follow posts modal ---- */
     .follow-posts-modal{
       position:fixed; inset:0; display:none; z-index:9999;
       background:rgba(0,0,0,.35); padding:16px;
@@ -75,7 +71,7 @@
       <div id="profileView">
         <div class="row">
           <div class="avatar-wrap">
-            <!-- 画像フォールバック（default-avatar.png が無い場合は埋め込みSVGを使用） -->
+            <!-- 画像フォールバック -->
             <img id="profileAvatarShow" class="avatar" src="images/default-avatar.png" alt="avatar"
                  onerror="this.onerror=null;this.src='data:image/svg+xml;utf8,<?xml version=&quot;1.0&quot;?><svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;84&quot; height=&quot;84&quot; viewBox=&quot;0 0 84 84&quot;><circle cx=&quot;42&quot; cy=&quot;42&quot; r=&quot;42&quot; fill=&quot;%23f1f5f9&quot;/><circle cx=&quot;42&quot; cy=&quot;34&quot; r=&quot;14&quot; fill=&quot;%23cbd5e1&quot;/><rect x=&quot;16&quot; y=&quot;52&quot; width=&quot;52&quot; height=&quot;20&quot; rx=&quot;10&quot; fill=&quot;%23cbd5e1&quot;/></svg>';">
           </div>
@@ -201,6 +197,48 @@
   <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
 
   <script src="script.js"></script>
+
+  <!-- ▼ 追加：ログイン状態の表示（ヘッダー右上）＋プロフィール名の初期化 ▼ -->
+  <script>
+    async function renderUserIcon(){
+      const box = document.getElementById("currentUserIcon");
+      if (!box) return;
+      try{
+        const res = await fetch("/api/me",{ credentials:"include", cache:"no-store" });
+        const data = await res.json();
+        if (data.ok && data.user){
+          const esc = s => (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m]));
+          const name = data.user.nickname || data.user.email;
+          // ヘッダー表示
+          box.innerHTML = `
+            <span style="display:inline-flex;align-items:center;gap:8px;">
+              <span class="pill" style="padding:6px 10px;border-radius:999px;background:#f1f5f9;">👤 ${esc(name)}</span>
+              <button id="logoutBtn" style="padding:6px 10px;border-radius:10px;border:1px solid #e6e6e6;background:#fff;cursor:pointer">ログアウト</button>
+            </span>`;
+          document.getElementById("logoutBtn")?.addEventListener("click", async()=>{
+            await fetch("/api/logout",{ method:"POST", credentials:"include" });
+            location.reload();
+          });
+
+          // プロフィール表示欄の名前も初期化（任意）
+          const nameShow = document.getElementById('profileNameShow');
+          if (nameShow && nameShow.textContent.trim() === '匿名') {
+            nameShow.textContent = name;
+          }
+          // 編集欄のニックネーム初期値も（未入力なら）
+          const nameInput = document.getElementById('profileNickname');
+          if (nameInput && !nameInput.value) {
+            nameInput.value = data.user.nickname || '';
+          }
+        }else{
+          box.innerHTML = `<a href="login.html">ログイン</a>`;
+        }
+      }catch{
+        box.innerHTML = `<a href="login.html">ログイン</a>`;
+      }
+    }
+    document.addEventListener("DOMContentLoaded", renderUserIcon);
+  </script>
 
   <footer>&copy; 2025 zange (テスト公開中)</footer>
 </body>
