@@ -19,7 +19,6 @@
     .comment-meta{ font-size:12px; color:#6b7280; margin-top:4px }
   </style>
   <script>
-    /* 同一オリジン優先（Render想定）→ 相対 → ルート */
     window.ZANGE_API_BASES = [
       location.origin.replace(/\/+$/,'') + '/api/posts',
       'api/posts',
@@ -31,14 +30,13 @@
   <header>
     <div style="display:flex; align-items:center; justify-content:space-between;">
       <h1><a href="index.html" style="text-decoration:none; color:inherit;">zange</a></h1>
+      <!-- ログイン状態 -->
       <span id="currentUserIcon"></span>
     </div>
   </header>
 
   <main class="stack">
-    <!-- 互換：旧スクリプトが使う描画先 -->
     <section id="detailCard" class="card"></section>
-    <!-- 新描画先 -->
     <section id="detailContainer"></section>
 
     <!-- コメント -->
@@ -47,13 +45,9 @@
       <div id="commentList" class="comment-list muted">まだコメントはありません。</div>
 
       <form id="commentForm" class="comment-form" autocomplete="off">
-        <input type="hidden" id="commentUser" value="匿名" />
-        <input type="hidden" id="cName" class="hidden-compat" value="匿名" />
-
+        <!-- userはサーバー側sessionから自動補完 -->
         <label>コメント</label>
         <textarea id="commentText" required placeholder="わかる！ / 自分もやった😂 など"></textarea>
-        <textarea id="cText" class="hidden-compat"></textarea>
-
         <button type="submit">投稿</button>
       </form>
       <p id="commentNote" class="muted" style="margin-top:8px;">※ 公開投稿のみコメント可能（MVP仕様）</p>
@@ -64,20 +58,15 @@
   <script>
     /* ===== ユーティリティ ===== */
     function fmtDate(iso){
-      if (typeof formatDate === 'function') return formatDate(iso);
       try {
         const d = new Date(iso||'');
         if (isNaN(d)) return '';
-        const y=d.getFullYear(), m=('0'+(d.getMonth()+1)).slice(-2), dd=('0'+d.getDate()).slice(-2);
-        const hh=('0'+d.getHours()).slice(-2), mm=('0'+d.getMinutes()).slice(-2);
-        return `${y}/${m}/${dd} ${hh}:${mm}`;
+        return `${d.getFullYear()}/${('0'+(d.getMonth()+1)).slice(-2)}/${('0'+d.getDate()).slice(-2)} ${('0'+d.getHours()).slice(-2)}:${('0'+d.getMinutes()).slice(-2)}`;
       } catch { return iso || ''; }
     }
     function esc(s){ return (s||'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
-    function q(name){
-      const u = new URL(location.href);
-      return u.searchParams.get(name) || '';
-    }
+    function q(name){ return new URL(location.href).searchParams.get(name) || ''; }
+
     async function fetchJsonWithFallback(urls, init){
       let last;
       for (const u of urls){
@@ -91,28 +80,24 @@
       throw last || new Error('fetch fail');
     }
 
-    /* ===== Posts API ===== */
     const API = {
       async list(){ return await fetchJsonWithFallback(window.ZANGE_API_BASES, { method:'GET' }); }
     };
 
-    /* ===== Comments API ベースURL（posts と同様にフォールバック構成） ===== */
     const COMMENTS_BASES = (window.ZANGE_API_BASES || [])
       .map(u => u.replace(/\/posts(\?.*)?$/,'/comments'))
       .concat([
         location.origin.replace(/\/+$/,'') + '/api/comments',
         'api/comments',
         '/api/comments'
-      ])
-      .filter(Boolean);
+      ]);
 
     async function listCommentsFromServer(postId){
       const qs = `?postId=${encodeURIComponent(postId)}`;
       return await fetchJsonWithFallback(COMMENTS_BASES.map(u=>u+qs), { method:'GET' });
     }
-    async function addCommentToServer(postId, user, text){
-      const body = JSON.stringify({ postId, user, text });
-      // POST は全BASEを順に試す
+    async function addCommentToServer(postId, text){
+      const body = JSON.stringify({ postId, text }); // userは送らずサーバーがsessionから補完
       let last;
       for (const base of COMMENTS_BASES){
         try{
@@ -122,7 +107,7 @@
             headers:{'Content-Type':'application/json'},
             body,
             cache:'no-store',
-            credentials:'omit'
+            credentials:'include'
           });
           if (!res.ok) throw new Error('HTTP '+res.status);
           return await res.json();
@@ -131,181 +116,110 @@
       throw last || new Error('post comment failed');
     }
 
-    /* ===== localStorage フォールバック（従来互換のため残す） ===== */
     function commentsKey(id){ return `zange_comments_${id}`; }
-    function loadCommentsLocal(id){
-      try { return JSON.parse(localStorage.getItem(commentsKey(id))||'[]'); }
-      catch { return []; }
-    }
+    function loadCommentsLocal(id){ try { return JSON.parse(localStorage.getItem(commentsKey(id))||'[]'); } catch { return []; } }
     function saveCommentLocal(id, item){
       const arr = loadCommentsLocal(id);
       arr.push(item);
       localStorage.setItem(commentsKey(id), JSON.stringify(arr));
     }
 
-    /* ===== コメント描画 ===== */
     function renderCommentsList(items){
       const listEl = document.getElementById('commentList');
       listEl.innerHTML = '';
-      if (!items.length){
-        listEl.classList.add('muted');
-        listEl.textContent = 'まだコメントはありません。';
-        return;
-      }
+      if (!items.length){ listEl.classList.add('muted'); listEl.textContent = 'まだコメントはありません。'; return; }
       listEl.classList.remove('muted');
       items.forEach(c=>{
         const div = document.createElement('div');
         div.className = 'comment-item';
-        div.innerHTML = `
-          <div>${esc(c.text)}</div>
-          <div class="comment-meta">by ${esc(c.user||'匿名')} ・ ${fmtDate(c.createdAt)}</div>
-        `;
+        div.innerHTML = `<div>${esc(c.text)}</div><div class="comment-meta">by ${esc(c.user||'匿名')} ・ ${fmtDate(c.createdAt)}</div>`;
         listEl.appendChild(div);
       });
     }
 
     async function renderComments(postId){
-      // 1) サーバー優先
       try{
-        const server = await listCommentsFromServer(postId); // ASCで返す実装
+        const server = await listCommentsFromServer(postId);
         renderCommentsList(server);
-        // ローカルにも同期しておく（任意）
-        try { localStorage.setItem(commentsKey(postId), JSON.stringify(server)); } catch {}
+        localStorage.setItem(commentsKey(postId), JSON.stringify(server));
         return;
-      }catch(e){
-        // 2) フォールバック：localStorage
-        const local = loadCommentsLocal(postId).sort((a,b)=>String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
-        renderCommentsList(local);
-      }
+      }catch{ renderCommentsList(loadCommentsLocal(postId)); }
     }
 
-    /* ===== 詳細描画 ===== */
     function renderDetail(post){
-      const old = document.getElementById('detailCard');
-      if (old){
-        old.innerHTML = `
-          <div class="detail-hero" style="${post.bg ? `background-image:url('${esc(post.bg.startsWith('http')?post.bg:('/images/'+post.bg))}')` : ''}">
-            <div class="detail-title">${esc(post.text||'')}</div>
-          </div>
-          <div class="post-meta">
-            <span>by ${esc(post.author||'匿名')}</span>
-            ${post.target?`<span class="pill">対象: ${esc(post.target)}</span>`:''}
-            ${post.tag?`<span class="pill">タグ: ${esc(post.tag)}</span>`:''}
-            <span>${fmtDate(post.createdAt||post.created_at||post.date)}</span>
-            ${post.scope?`<span class="pill">公開: ${esc(post.scope)}</span>`:''}
-          </div>
-        `;
-      }
-
       const wrap = document.getElementById('detailContainer');
-      if (wrap){
-        const card = document.createElement('article');
-        card.className = 'card zange-post';
-        card.innerHTML = `
-          <div class="post-body" style="font-size:16px; line-height:1.8">${esc((post.text||'')).replace(/\n/g,'<br>')}</div>
-          <div class="post-meta" style="margin-top:8px">
-            <span class="post-author">by ${esc(post.author||'匿名')}</span>
-            ${post.target?`<span class="pill">対象: ${esc(post.target)}</span>`:''}
-            ${post.tag?`<span class="pill">タグ: ${esc(post.tag)}</span>`:''}
-            ${post.scope?`<span class="pill">公開: ${esc(post.scope)}</span>`:''}
-            <span>・${fmtDate(post.createdAt||post.created_at||post.date)}</span>
-            <button class="post-stamp-btn" type="button" data-id="${post.id||''}" aria-label="スタンプする">👏</button>
-          </div>
-        `;
-        wrap.innerHTML = '';
-        wrap.appendChild(card);
-      }
+      if (!wrap) return;
+      const card = document.createElement('article');
+      card.className = 'card zange-post';
+      card.innerHTML = `
+        <div class="post-body" style="font-size:16px; line-height:1.8">${esc((post.text||'')).replace(/\n/g,'<br>')}</div>
+        <div class="post-meta" style="margin-top:8px">
+          <span class="post-author">by ${esc(post.author||'匿名')}</span>
+          ${post.target?`<span class="pill">対象: ${esc(post.target)}</span>`:''}
+          ${post.tag?`<span class="pill">タグ: ${esc(post.tag)}</span>`:''}
+          ${post.scope?`<span class="pill">公開: ${esc(post.scope)}</span>`:''}
+          <span>・${fmtDate(post.createdAt||post.created_at||post.date)}</span>
+          <button class="post-stamp-btn" type="button" data-id="${post.id||''}" aria-label="スタンプする">👏</button>
+        </div>`;
+      wrap.innerHTML = '';
+      wrap.appendChild(card);
     }
 
-    /* ===== 入力ミラー（互換維持） ===== */
-    (function mirrorSetup(){
-      const nameOld = document.getElementById('commentUser');
-      const nameNew = document.getElementById('cName');
-      const textOld = document.getElementById('commentText');
-      const textNew = document.getElementById('cText');
-      function mirror(src, dst){ dst.value = src.value; }
-
-      if (nameOld && nameNew) {
-        nameOld.addEventListener('input', ()=> mirror(nameOld, nameNew));
-        nameNew.addEventListener('input', ()=> mirror(nameNew, nameOld));
-        if (!nameNew.value) nameNew.value = nameOld.value || '';
-      }
-      if (textOld && textNew) {
-        textOld.addEventListener('input', ()=> mirror(textOld, textNew));
-        textNew.addEventListener('input', ()=> mirror(textNew, textOld));
-        if (!textNew.value) textNew.value = textOld.value || '';
-      }
-    })();
-
-    /* ===== メイン ===== */
     (async function main(){
       const idParam = q('id') || q('postId');
       const detailCard = document.getElementById('detailCard');
       const commentForm = document.getElementById('commentForm');
       const commentNote = document.getElementById('commentNote');
 
-      if (!idParam){
-        detailCard.innerHTML = '<div class="muted">投稿IDが指定されていません。</div>';
-        commentForm.style.display = 'none';
-        commentNote.textContent = '※ 投稿が見つからないためコメントはできません。';
-        return;
-      }
+      if (!idParam){ detailCard.innerHTML = '<div class="muted">投稿IDが指定されていません。</div>'; commentForm.style.display = 'none'; return; }
 
       let posts = [];
-      try{
-        posts = await API.list();
-      }catch(e){
-        detailCard.innerHTML = `<div class="muted">投稿の取得に失敗しました（${e?.message||'エラー'}）。</div>`;
-        commentForm.style.display = 'none';
-        commentNote.textContent = '※ 投稿が取得できないためコメントはできません。';
-        return;
-      }
+      try{ posts = await API.list(); }
+      catch(e){ detailCard.innerHTML = `<div class="muted">投稿の取得に失敗しました。</div>`; commentForm.style.display = 'none'; return; }
 
       const post = posts.find(p => String(p.id) === String(idParam));
-      if (!post){
-        detailCard.innerHTML = '<div class="muted">該当の投稿が見つかりませんでした。</div>';
-        commentForm.style.display = 'none';
-        commentNote.textContent = '※ 投稿が見つからないためコメントはできません。';
-        return;
-      }
+      if (!post){ detailCard.innerHTML = '<div class="muted">該当の投稿が見つかりません。</div>'; commentForm.style.display = 'none'; return; }
 
       renderDetail(post);
+      if ((post.scope||'public') !== 'public'){ commentForm.style.display='none'; commentNote.textContent='※ 非公開投稿のためコメントはできません。'; }
 
-      const isPublic = (post.scope || 'public') === 'public';
-      if (!isPublic){
-        commentForm.style.display = 'none';
-        commentNote.textContent = '※ 非公開投稿のためコメントはできません。';
-      }
-
-      // 初期表示：サーバー優先 → 失敗時ローカル
       await renderComments(post.id);
 
-      // 送信
       commentForm.addEventListener('submit', async (e)=>{
         e.preventDefault();
-        if (!isPublic) return;
-
-        const user = (document.getElementById('commentUser')?.value || '匿名').trim();
         const text = (document.getElementById('commentText')?.value || '').trim();
         if (!text){ alert('コメントを入力してください'); return; }
-
-        // 1) まずサーバーへ
-        try{
-          await addCommentToServer(post.id, user || '匿名', text);
-        }catch(e){
-          // 2) サーバー失敗時はローカルへフォールバック
-          console.warn('comment POST failed, fallback to local:', e?.message || e);
-          saveCommentLocal(post.id, { user: user||'匿名', text, createdAt: new Date().toISOString() });
-        }
-
-        // 入力クリア & 再読込（サーバー優先）
-        (document.getElementById('commentText')||{}).value = '';
+        try{ await addCommentToServer(post.id, text); }
+        catch(e){ saveCommentLocal(post.id, { text, createdAt: new Date().toISOString() }); }
+        document.getElementById('commentText').value = '';
         await renderComments(post.id);
       });
     })();
+
+    // ===== ログイン状態の表示 =====
+    async function renderUserIcon(){
+      const box = document.getElementById("currentUserIcon");
+      if (!box) return;
+      try{
+        const res = await fetch("/api/me",{credentials:"include",cache:"no-store"});
+        const data = await res.json();
+        if (data.ok && data.user){
+          const name = data.user.nickname || data.user.email;
+          box.innerHTML = `
+            <span style="display:inline-flex;align-items:center;gap:8px;">
+              <span class="pill" style="padding:6px 10px;border-radius:999px;background:#f1f5f9;">👤 ${esc(name)}</span>
+              <button id="logoutBtn" style="padding:6px 10px;border-radius:10px;border:1px solid #e6e6e6;background:#fff;cursor:pointer">ログアウト</button>
+            </span>`;
+          document.getElementById("logoutBtn")?.addEventListener("click", async()=>{
+            await fetch("/api/logout",{method:"POST",credentials:"include"});
+            renderUserIcon();
+          });
+        } else { box.innerHTML = `<a href="login.html">ログイン</a>`; }
+      }catch{ box.innerHTML = `<a href="login.html">ログイン</a>`; }
+    }
+    document.addEventListener("DOMContentLoaded", renderUserIcon);
   </script>
 
-  <!-- モバイルタブバー -->
   <footer class="mobile-tabbar">
     <nav>
       <a href="index.html"><span class="icon">🏠</span><span class="label">ホーム</span></a>
@@ -318,7 +232,6 @@
       <a href="about.html"><span class="icon">📕</span><span class="label">概要</span></a>
     </nav>
   </footer>
-
   <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
 </body>
 </html>
