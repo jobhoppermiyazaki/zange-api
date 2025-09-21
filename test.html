@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Zange API テストページ</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      padding: 20px;
+      background: #f9fafb;
+    }
+    button {
+      display: block;
+      margin: 8px 0;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      background: #2563eb;
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    button:hover { background: #1e40af; }
+    pre {
+      background: #111;
+      color: #0f0;
+      padding: 12px;
+      border-radius: 6px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+  <h1>Zange API テスト</h1>
+
+  <button onclick="signup()">① サインアップ</button>
+  <button onclick="login()">② ログイン</button>
+  <button onclick="me()">③ 自分の状態確認</button>
+  <button onclick="logout()">④ ログアウト</button>
+
+  <h3>レスポンス</h3>
+  <pre id="output">ここに結果が表示されます</pre>
+
+  <script>
+    const API = "https://zange-api.onrender.com/api";
+
+    function log(result) {
+      document.getElementById("output").textContent =
+        JSON.stringify(result, null, 2);
+    }
+
+    function signup() {
+      fetch(API + "/signup", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        credentials: "include", // ← Cookieを維持
+        body: JSON.stringify({
+          email: "test" + Math.floor(Math.random()*1000) + "@example.com",
+          password: "password123",
+          nickname: "テスト"
+        })
+      }).then(r => r.json()).then(log)
+        .catch(err => log({error: err.toString()}));
+    }
+
+    function login() {
+      fetch(API + "/login", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        credentials: "include",
+        body: JSON.stringify({
+          email: "test@example.com", // ←固定ユーザーでOK
+          password: "password123"
+        })
+      }).then(r => r.json()).then(log)
+        .catch(err => log({error: err.toString()}));
+    }
+
+    function me() {
+      fetch(API + "/me", {
+        credentials: "include"
+      }).then(r => r.json()).then(log)
+        .catch(err => log({error: err.toString()}));
+    }
+
+    function logout() {
+      fetch(API + "/logout", {
+        method: "POST",
+        credentials: "include"
+      }).then(r => r.json()).then(log)
+        .catch(err => log({error: err.toString()}));
+    }
+  </script>
+</body>
+</html>
