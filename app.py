@@ -4,6 +4,7 @@ from flask_cors import CORS
 from datetime import datetime, timezone, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3, os, threading, secrets
+import json, unicodedata  # ★ 追加
 
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(APP_ROOT, "data.sqlite3")
@@ -90,6 +91,31 @@ def no_store(resp):
 def root():
     return send_from_directory(".", "index.html")
 
+# ===== ユーティリティ =====
+def _read_json():
+    """Content-Type が崩れても JSON を頑張って読む"""
+    data = request.get_json(silent=True)
+    if data is None:
+        try:
+            raw = request.data.decode("utf-8", "ignore")
+            data = json.loads(raw) if raw.strip().startswith("{") else {}
+        except Exception:
+            data = {}
+    # application/x-www-form-urlencoded 対応
+    if not data and request.form:
+        data = request.form.to_dict()
+    return data or {}
+
+def _clean(s: str) -> str:
+    """NFKC 正規化 + ゼロ幅/不可視の除去 + 前後空白除去"""
+    s = s or ""
+    s = unicodedata.normalize("NFKC", s)
+    # よく紛れ込む不可視文字を除去
+    invisible = ["\u200b", "\u200c", "\u200d", "\ufeff", "\u2060", "\u00a0"]
+    for ch in invisible:
+        s = s.replace(ch, "")
+    return s.strip()
+
 # ========== ユーザー/認証 ==========
 def _current_user():
     uid = session.get("uid")
@@ -103,10 +129,16 @@ def _current_user():
 
 @app.post("/api/signup")
 def api_signup():
-    data = request.get_json(silent=True) or {}
-    email = (data.get("email") or "").strip().lower()
-    password = (data.get("password") or "").strip()
-    nickname = (data.get("nickname") or "").strip() or None
+    data = _read_json()
+    email = _clean((data.get("email") or "")).lower()
+    password = _clean(data.get("password") or "")
+    nickname = _clean(data.get("nickname") or "") or None
+
+    # デバッグ（必要に応じてコメントアウト可）
+    print("[SIGNUP] UA=", request.headers.get("User-Agent", "-"),
+          "CT=", request.headers.get("Content-Type", "-"),
+          "email=", repr(email), "len=", len(email),
+          "pwlen=", len(password))
 
     if not email or not password:
         return jsonify({"ok": False, "error": "email and password required"}), 400
@@ -126,14 +158,21 @@ def api_signup():
         return jsonify({"ok": False, "error": "already exists"}), 409
 
     session["uid"] = uid
+    session.permanent = True
     user = {"id": uid, "email": email, "nickname": nickname, "createdAt": now_iso}
     return jsonify({"ok": True, "user": user}), 201
 
 @app.post("/api/login")
 def api_login():
-    data = request.get_json(silent=True) or {}
-    email = (data.get("email") or "").strip().lower()
-    password = (data.get("password") or "").strip()
+    data = _read_json()
+    email = _clean((data.get("email") or "")).lower()
+    password = _clean(data.get("password") or "")
+
+    # ★ デバッグ出力
+    print("[LOGIN]  UA=", request.headers.get("User-Agent", "-"),
+          "CT=", request.headers.get("Content-Type", "-"),
+          "email=", repr(email), "len=", len(email),
+          "password=", repr(password), "pwlen=", len(password))
 
     with _lock, _conn() as con:
         row = con.execute(
@@ -142,9 +181,12 @@ def api_login():
         ).fetchone()
 
     if not row or not check_password_hash(row["password_hash"], password):
+        # 失敗時もログ（どこまで届いているか判断）
+        print("[LOGIN][FAIL] email_exists=", bool(row))
         return jsonify({"ok": False, "error": "invalid credentials"}), 401
 
     session["uid"] = row["id"]
+    session.permanent = True
     user = {"id": row["id"], "email": row["email"], "nickname": row["nickname"], "createdAt": row["createdAt"]}
     return jsonify({"ok": True, "user": user}), 200
 
@@ -168,12 +210,12 @@ def list_posts():
 
 @app.post("/api/posts")
 def add_post():
-    data = request.get_json(silent=True) or {}
-    text   = (data.get("text")   or "").strip()
-    target = (data.get("target") or "").strip()
-    tag    = (data.get("tag")    or "").strip()
-    bg     = (data.get("bg")     or "").strip()
-    scope  = (data.get("scope")  or "public").strip()
+    data = _read_json()
+    text   = _clean(data.get("text")   or "")
+    target = _clean(data.get("target") or "")
+    tag    = _clean(data.get("tag")    or "")
+    bg     = _clean(data.get("bg")     or "")
+    scope  = _clean(data.get("scope")  or "public") or "public"
 
     if not text:
         return jsonify({"error": "text is required"}), 400
@@ -197,7 +239,7 @@ def add_post():
 @app.get("/api/comments")
 def list_comments():
     """?postId= を付けて呼ぶ想定。未指定なら新しい順で全件（テスト用）"""
-    post_id = request.args.get("postId", "").strip()
+    post_id = (request.args.get("postId", "") or "").strip()
     with _lock, _conn() as con:
         if post_id:
             cur = con.execute(
@@ -211,9 +253,9 @@ def list_comments():
 
 @app.post("/api/comments")
 def add_comment():
-    data = request.get_json(silent=True) or {}
-    post_id = str(data.get("postId") or "").strip()
-    text    = (data.get("text") or "").strip()
+    data = _read_json()
+    post_id = _clean(str(data.get("postId") or ""))
+    text    = _clean(data.get("text") or "")
 
     if not post_id.isdigit():
         return jsonify({"error": "postId is required"}), 400
