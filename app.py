@@ -3,7 +3,7 @@ from flask import Flask, request, jsonify, send_from_directory, session
 from flask_cors import CORS
 from datetime import datetime, timezone, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
-import sqlite3, os, threading, secrets
+import sqlite3, os, threading, secrets, unicodedata as _ud
 
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(APP_ROOT, "data.sqlite3")
@@ -68,15 +68,23 @@ def _init_db():
         con.commit()
 _init_db()
 
-# ===== 正規化ユーティリティ =====
+# ===== 正規化ユーティリティ（① 揺れ吸収）=====
+def _nfc(s: str) -> str:
+    try:
+        return _ud.normalize("NFC", s or "")
+    except Exception:
+        return (s or "")
+
+def _strip_odd_spaces(s: str) -> str:
+    # NBSP/全角空白/ゼロ幅空白などを通常空白へ or 除去
+    return (s or "").replace("\u00A0", " ").replace("\u3000", " ").replace("\u200B", "")
+
 def _norm_email(s: str) -> str:
-    s = (s or "")
-    s = s.replace("\u00A0", " ").replace("\u3000", " ").replace("\u200B", "")
+    s = _nfc(_strip_odd_spaces(s))
     return s.strip().lower()
 
 def _norm_pw(s: str) -> str:
-    s = (s or "")
-    s = s.replace("\u00A0", " ").replace("\u3000", " ").replace("\u200B", "")
+    s = _nfc(_strip_odd_spaces(s))
     return s.strip()
 
 # ===== レスポンスキャッシュ無効化 =====
@@ -108,6 +116,7 @@ def api_signup():
     password_in = (data.get("password") or "")
     nickname = (data.get("nickname") or "").strip() or None
 
+    # ② サインアップ時：正規化して保存
     email = _norm_email(email_in)
     password = _norm_pw(password_in)
 
@@ -141,6 +150,7 @@ def api_login():
     email_norm = _norm_email(email_in)
     pw_norm = _norm_pw(password_in)
 
+    # ③ ログイン時：正規化後 と 生入力 の両方で検索＋検証
     with _lock, _conn() as con:
         row = con.execute(
             "SELECT id,email,password_hash,nickname,createdAt FROM users WHERE email=?",
@@ -154,6 +164,7 @@ def api_login():
 
     ok = False
     if row:
+        # 生→ダメなら正規化後で照合
         if check_password_hash(row["password_hash"], password_in):
             ok = True
         elif pw_norm != password_in and check_password_hash(row["password_hash"], pw_norm):
@@ -254,16 +265,69 @@ def add_comment():
         row = dict(con.execute("SELECT * FROM comments WHERE id=?", (new_id,)).fetchone())
     return jsonify(row), 201
 
-# ===== ヘルスチェック / バージョン確認 =====
+# ===== ヘルスチェック / バージョン確認（⑤ 印）=====
 @app.get("/api/health")
 def health():
     return jsonify({"ok": True}), 200
 
 @app.get("/api/ping")
 def ping():
+    # “新しいコードが動いている”ことを確認する印
     return jsonify({"ok": True, "version": "login-fallback-v3"}), 200
 
-# ===== デバッグ用（任意） =====
+# ===== デバッグ系（⑥ 観測用&開発用ユーティリティ） =====
+@app.get("/api/auth-debug")
+def api_auth_debug():
+    """
+    開発確認用：メールの存在を確認するだけ。
+    例: /api/auth-debug?email=a@example.com
+    レスポンス: {"ok": true, "exists_raw": false, "exists_n": true, "sample":"auth-debug-v1"}
+    """
+    email_raw = (request.args.get("email") or "").strip()
+    email_n   = _norm_email(email_raw)
+    with _lock, _conn() as con:
+        row_raw = con.execute("SELECT id FROM users WHERE email=?", (email_raw,)).fetchone()
+        row_n   = con.execute("SELECT id FROM users WHERE email=?", (email_n,)).fetchone()
+    return jsonify({
+        "ok": True,
+        "exists_raw": bool(row_raw),
+        "exists_n": bool(row_n),
+        "sample": "auth-debug-v1"
+    }), 200
+
+@app.post("/api/dev-reset-password")
+def api_dev_reset_password():
+    """
+    開発専用：パスワードを強制更新（本番では使わない）。
+    使い方:
+      1) 環境変数 DEV_RESET_TOKEN を設定してデプロイ
+      2) POST /api/dev-reset-password?email=...&new=...&token=＜DEV_RESET_TOKEN＞
+         もしくは JSON で {email,new,token}
+    """
+    token_expect = os.environ.get("DEV_RESET_TOKEN")
+    if not token_expect:
+        return jsonify({"ok": False, "error": "disabled"}), 403
+
+    token = (request.args.get("token") or (request.json.get("token") if request.is_json else "") or "").strip()
+    if token != token_expect:
+        return jsonify({"ok": False, "error": "forbidden"}), 403
+
+    email_raw = (request.args.get("email") or (request.json.get("email") if request.is_json else "") or "").strip()
+    new_pw    = (request.args.get("new")    or (request.json.get("new")    if request.is_json else "") or "").strip()
+    if not email_raw or not new_pw:
+        return jsonify({"ok": False, "error": "email and new required"}), 400
+
+    email_n = _norm_email(email_raw)
+    with _lock, _conn() as con:
+        row = con.execute("SELECT id FROM users WHERE email=? OR email=?", (email_raw, email_n)).fetchone()
+        if not row:
+            return jsonify({"ok": False, "error": "user not found"}), 404
+        con.execute("UPDATE users SET password_hash=? WHERE id=?",
+                    (generate_password_hash(_norm_pw(new_pw)), row["id"]))
+        con.commit()
+    return jsonify({"ok": True}), 200
+
+# ===== 低リスクな内部デバッグ（有効化時のみ）=====
 @app.post("/api/_debug_login")
 def _debug_login():
     if not os.environ.get("DEBUG_LOGIN"):
@@ -276,9 +340,11 @@ def _debug_login():
     with _lock, _conn() as con:
         row_n = con.execute("SELECT id,password_hash FROM users WHERE email=?", (email_norm,)).fetchone()
         row_r = con.execute("SELECT id,password_hash FROM users WHERE email=?", (email_in.strip(),)).fetchone()
-    def chk(r, pw): 
-        try: return bool(r and check_password_hash(r["password_hash"], pw))
-        except: return False
+    def chk(r, pw):
+        try:
+            return bool(r and check_password_hash(r["password_hash"], pw))
+        except Exception:
+            return False
     return jsonify({
         "ok": True,
         "email_in": email_in,
