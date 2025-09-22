@@ -3,25 +3,20 @@ from flask import Flask, request, jsonify, send_from_directory, session
 from flask_cors import CORS
 from datetime import datetime, timezone, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
-import sqlite3, os, threading, secrets
-import json, unicodedata  # ★ 追加
+import sqlite3, os, threading, secrets, json, unicodedata
 
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(APP_ROOT, "data.sqlite3")
 
 app = Flask(__name__, static_folder='.', static_url_path='')
-
-# 将来クッキーを跨いで使う場合に備えて credentials を許可
 CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 
-# ===== セッション鍵（本番は環境変数で） =====
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     PERMANENT_SESSION_LIFETIME=timedelta(days=30),
 )
-# Render/https なら Secure をON
 if os.environ.get("RENDER"):
     app.config["SESSION_COOKIE_SECURE"] = True
 
@@ -30,13 +25,11 @@ _lock = threading.Lock()
 def _conn():
     con = sqlite3.connect(DB_PATH, check_same_thread=False)
     con.row_factory = sqlite3.Row
-    # 外部キー有効化
     con.execute("PRAGMA foreign_keys = ON;")
     return con
 
 def _init_db():
     with _lock, _conn() as con:
-        # 投稿
         con.execute("""
         CREATE TABLE IF NOT EXISTS posts (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,9 +40,7 @@ def _init_db():
           bg TEXT,
           scope TEXT,
           createdAt TEXT
-        )
-        """)
-        # コメント
+        )""")
         con.execute("""
         CREATE TABLE IF NOT EXISTS comments (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,9 +49,7 @@ def _init_db():
           text TEXT NOT NULL,
           createdAt TEXT,
           FOREIGN KEY(postId) REFERENCES posts(id)
-        )
-        """)
-        # ユーザー
+        )""")
         con.execute("""
         CREATE TABLE IF NOT EXISTS users (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,17 +57,12 @@ def _init_db():
           password_hash TEXT NOT NULL,
           nickname TEXT,
           createdAt TEXT
-        )
-        """)
-
-        # 既存DBに users.createdAt が無い場合に追加（簡易マイグレーション）
+        )""")
         try:
             con.execute("SELECT createdAt FROM users LIMIT 1;")
         except sqlite3.OperationalError:
             con.execute("ALTER TABLE users ADD COLUMN createdAt TEXT;")
-
         con.commit()
-
 _init_db()
 
 @app.after_request
@@ -91,9 +75,8 @@ def no_store(resp):
 def root():
     return send_from_directory(".", "index.html")
 
-# ===== ユーティリティ =====
+# -------- helpers --------
 def _read_json():
-    """Content-Type が崩れても JSON を頑張って読む"""
     data = request.get_json(silent=True)
     if data is None:
         try:
@@ -101,22 +84,17 @@ def _read_json():
             data = json.loads(raw) if raw.strip().startswith("{") else {}
         except Exception:
             data = {}
-    # application/x-www-form-urlencoded 対応
     if not data and request.form:
         data = request.form.to_dict()
     return data or {}
 
 def _clean(s: str) -> str:
-    """NFKC 正規化 + ゼロ幅/不可視の除去 + 前後空白除去"""
     s = s or ""
     s = unicodedata.normalize("NFKC", s)
-    # よく紛れ込む不可視文字を除去
-    invisible = ["\u200b", "\u200c", "\u200d", "\ufeff", "\u2060", "\u00a0"]
-    for ch in invisible:
+    for ch in ("\u200b","\u200c","\u200d","\ufeff","\u2060","\u00a0"):
         s = s.replace(ch, "")
     return s.strip()
 
-# ========== ユーザー/認証 ==========
 def _current_user():
     uid = session.get("uid")
     if not uid:
@@ -127,19 +105,16 @@ def _current_user():
         ).fetchone()
         return dict(row) if row else None
 
+# -------- auth --------
 @app.post("/api/signup")
 def api_signup():
     data = _read_json()
-    email = _clean((data.get("email") or "")).lower()
-    password = _clean(data.get("password") or "")
-    nickname = _clean(data.get("nickname") or "") or None
+    email_raw = (data.get("email") or "")
+    pw_raw    = (data.get("password") or "")
+    nickname  = _clean(data.get("nickname") or "") or None
 
-    # デバッグ（必要に応じてコメントアウト可）
-    print("[SIGNUP] UA=", request.headers.get("User-Agent", "-"),
-          "CT=", request.headers.get("Content-Type", "-"),
-          "email=", repr(email), "len=", len(email),
-          "pwlen=", len(password))
-
+    email = _clean(email_raw).lower()
+    password = pw_raw  # ここは“生”で保存（従来互換）
     if not email or not password:
         return jsonify({"ok": False, "error": "email and password required"}), 400
     if len(password) < 8:
@@ -159,36 +134,47 @@ def api_signup():
 
     session["uid"] = uid
     session.permanent = True
-    user = {"id": uid, "email": email, "nickname": nickname, "createdAt": now_iso}
-    return jsonify({"ok": True, "user": user}), 201
+    return jsonify({"ok": True, "user": {
+        "id": uid, "email": email, "nickname": nickname, "createdAt": now_iso
+    }}), 201
 
 @app.post("/api/login")
 def api_login():
     data = _read_json()
-    email = _clean((data.get("email") or "")).lower()
-    password = _clean(data.get("password") or "")
+    email_raw = (data.get("email") or "")
+    pw_raw    = (data.get("password") or "")
 
-    # ★ デバッグ出力
-    print("[LOGIN]  UA=", request.headers.get("User-Agent", "-"),
-          "CT=", request.headers.get("Content-Type", "-"),
-          "email=", repr(email), "len=", len(email),
-          "password=", repr(password), "pwlen=", len(password))
+    email_clean = _clean(email_raw).lower()
+    pw_clean    = _clean(pw_raw)
 
+    # email は clean / raw の両方で試す（DBの表記ゆれに対応）
     with _lock, _conn() as con:
         row = con.execute(
             "SELECT id,email,password_hash,nickname,createdAt FROM users WHERE email=?",
-            (email,)
+            (email_clean,)
         ).fetchone()
+        if not row and email_raw != email_clean:
+            row = con.execute(
+                "SELECT id,email,password_hash,nickname,createdAt FROM users WHERE email=?",
+                (email_raw.lower(),)
+            ).fetchone()
 
-    if not row or not check_password_hash(row["password_hash"], password):
-        # 失敗時もログ（どこまで届いているか判断）
-        print("[LOGIN][FAIL] email_exists=", bool(row))
+    ok = False
+    if row:
+        # パスワードは clean と raw の両方を試す（後方互換）
+        if check_password_hash(row["password_hash"], pw_clean):
+            ok = True
+        elif pw_raw != pw_clean and check_password_hash(row["password_hash"], pw_raw):
+            ok = True
+
+    if not ok:
         return jsonify({"ok": False, "error": "invalid credentials"}), 401
 
     session["uid"] = row["id"]
     session.permanent = True
-    user = {"id": row["id"], "email": row["email"], "nickname": row["nickname"], "createdAt": row["createdAt"]}
-    return jsonify({"ok": True, "user": user}), 200
+    return jsonify({"ok": True, "user": {
+        "id": row["id"], "email": row["email"], "nickname": row["nickname"], "createdAt": row["createdAt"]
+    }}), 200
 
 @app.post("/api/logout")
 def api_logout():
@@ -200,7 +186,7 @@ def api_me():
     user = _current_user()
     return jsonify({"ok": bool(user), "user": user}), 200
 
-# ========== Posts ==========
+# -------- posts --------
 @app.get("/api/posts")
 def list_posts():
     with _lock, _conn() as con:
@@ -220,7 +206,6 @@ def add_post():
     if not text:
         return jsonify({"error": "text is required"}), 400
 
-    # ★ クライアントからの author は無視し、サーバーで決定
     cu = _current_user()
     author = (cu.get("nickname") if cu else None) or (cu.get("email") if cu else None) or "匿名"
 
@@ -235,10 +220,9 @@ def add_post():
         row = dict(con.execute("SELECT * FROM posts WHERE id=?", (new_id,)).fetchone())
     return jsonify(row), 201
 
-# ========== Comments ==========
+# -------- comments --------
 @app.get("/api/comments")
 def list_comments():
-    """?postId= を付けて呼ぶ想定。未指定なら新しい順で全件（テスト用）"""
     post_id = (request.args.get("postId", "") or "").strip()
     with _lock, _conn() as con:
         if post_id:
@@ -262,7 +246,6 @@ def add_comment():
     if not text:
         return jsonify({"error": "text is required"}), 400
 
-    # ★ ログイン済みならニックネーム/メールを優先、未ログインなら「匿名」
     cu = _current_user()
     user = (cu.get("nickname") if cu else None) or (cu.get("email") if cu else None) or "匿名"
 
@@ -280,7 +263,6 @@ def add_comment():
         row = dict(con.execute("SELECT * FROM comments WHERE id=?", (new_id,)).fetchone())
     return jsonify(row), 201
 
-# ヘルスチェック（任意）
 @app.get("/api/health")
 def health():
     return jsonify({"ok": True}), 200
