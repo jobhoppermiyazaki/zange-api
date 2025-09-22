@@ -3,25 +3,27 @@ from flask import Flask, request, jsonify, send_from_directory, session
 from flask_cors import CORS
 from datetime import datetime, timezone, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
-import sqlite3, os, threading, secrets, json, unicodedata
+import sqlite3, os, threading, secrets
 
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(APP_ROOT, "data.sqlite3")
 
 app = Flask(__name__, static_folder='.', static_url_path='')
-CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 
+# ===== CORS / セッション設定 =====
+CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     PERMANENT_SESSION_LIFETIME=timedelta(days=30),
 )
-if os.environ.get("RENDER"):
+if os.environ.get("RENDER"):  # Render/https 環境なら Secure をON
     app.config["SESSION_COOKIE_SECURE"] = True
 
 _lock = threading.Lock()
 
+# ===== DB接続 =====
 def _conn():
     con = sqlite3.connect(DB_PATH, check_same_thread=False)
     con.row_factory = sqlite3.Row
@@ -58,6 +60,7 @@ def _init_db():
           nickname TEXT,
           createdAt TEXT
         )""")
+        # 簡易マイグレーション
         try:
             con.execute("SELECT createdAt FROM users LIMIT 1;")
         except sqlite3.OperationalError:
@@ -65,6 +68,18 @@ def _init_db():
         con.commit()
 _init_db()
 
+# ===== 正規化ユーティリティ =====
+def _norm_email(s: str) -> str:
+    s = (s or "")
+    s = s.replace("\u00A0", " ").replace("\u3000", " ").replace("\u200B", "")
+    return s.strip().lower()
+
+def _norm_pw(s: str) -> str:
+    s = (s or "")
+    s = s.replace("\u00A0", " ").replace("\u3000", " ").replace("\u200B", "")
+    return s.strip()
+
+# ===== レスポンスキャッシュ無効化 =====
 @app.after_request
 def no_store(resp):
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
@@ -75,26 +90,7 @@ def no_store(resp):
 def root():
     return send_from_directory(".", "index.html")
 
-# -------- helpers --------
-def _read_json():
-    data = request.get_json(silent=True)
-    if data is None:
-        try:
-            raw = request.data.decode("utf-8", "ignore")
-            data = json.loads(raw) if raw.strip().startswith("{") else {}
-        except Exception:
-            data = {}
-    if not data and request.form:
-        data = request.form.to_dict()
-    return data or {}
-
-def _clean(s: str) -> str:
-    s = s or ""
-    s = unicodedata.normalize("NFKC", s)
-    for ch in ("\u200b","\u200c","\u200d","\ufeff","\u2060","\u00a0"):
-        s = s.replace(ch, "")
-    return s.strip()
-
+# ===== ユーザー関連 =====
 def _current_user():
     uid = session.get("uid")
     if not uid:
@@ -105,16 +101,16 @@ def _current_user():
         ).fetchone()
         return dict(row) if row else None
 
-# -------- auth --------
 @app.post("/api/signup")
 def api_signup():
-    data = _read_json()
-    email_raw = (data.get("email") or "")
-    pw_raw    = (data.get("password") or "")
-    nickname  = _clean(data.get("nickname") or "") or None
+    data = request.get_json(silent=True) or {}
+    email_in = (data.get("email") or "")
+    password_in = (data.get("password") or "")
+    nickname = (data.get("nickname") or "").strip() or None
 
-    email = _clean(email_raw).lower()
-    password = pw_raw  # ここは“生”で保存（従来互換）
+    email = _norm_email(email_in)
+    password = _norm_pw(password_in)
+
     if not email or not password:
         return jsonify({"ok": False, "error": "email and password required"}), 400
     if len(password) < 8:
@@ -133,48 +129,43 @@ def api_signup():
         return jsonify({"ok": False, "error": "already exists"}), 409
 
     session["uid"] = uid
-    session.permanent = True
-    return jsonify({"ok": True, "user": {
-        "id": uid, "email": email, "nickname": nickname, "createdAt": now_iso
-    }}), 201
+    user = {"id": uid, "email": email, "nickname": nickname, "createdAt": now_iso}
+    return jsonify({"ok": True, "user": user}), 201
 
 @app.post("/api/login")
 def api_login():
-    data = _read_json()
-    email_raw = (data.get("email") or "")
-    pw_raw    = (data.get("password") or "")
+    data = request.get_json(silent=True) or {}
+    email_in = (data.get("email") or "")
+    password_in = (data.get("password") or "")
 
-    email_clean = _clean(email_raw).lower()
-    pw_clean    = _clean(pw_raw)
+    email_norm = _norm_email(email_in)
+    pw_norm = _norm_pw(password_in)
 
-    # email は clean / raw の両方で試す（DBの表記ゆれに対応）
     with _lock, _conn() as con:
         row = con.execute(
             "SELECT id,email,password_hash,nickname,createdAt FROM users WHERE email=?",
-            (email_clean,)
+            (email_norm,)
         ).fetchone()
-        if not row and email_raw != email_clean:
+        if not row and email_in.strip() != email_norm:
             row = con.execute(
                 "SELECT id,email,password_hash,nickname,createdAt FROM users WHERE email=?",
-                (email_raw.lower(),)
+                (email_in.strip(),)
             ).fetchone()
 
     ok = False
     if row:
-        # パスワードは clean と raw の両方を試す（後方互換）
-        if check_password_hash(row["password_hash"], pw_clean):
+        if check_password_hash(row["password_hash"], password_in):
             ok = True
-        elif pw_raw != pw_clean and check_password_hash(row["password_hash"], pw_raw):
+        elif pw_norm != password_in and check_password_hash(row["password_hash"], pw_norm):
             ok = True
 
-    if not ok:
+    if not row or not ok:
         return jsonify({"ok": False, "error": "invalid credentials"}), 401
 
-    session["uid"] = row["id"]
     session.permanent = True
-    return jsonify({"ok": True, "user": {
-        "id": row["id"], "email": row["email"], "nickname": row["nickname"], "createdAt": row["createdAt"]
-    }}), 200
+    session["uid"] = row["id"]
+    user = {"id": row["id"], "email": row["email"], "nickname": row["nickname"], "createdAt": row["createdAt"]}
+    return jsonify({"ok": True, "user": user}), 200
 
 @app.post("/api/logout")
 def api_logout():
@@ -186,7 +177,7 @@ def api_me():
     user = _current_user()
     return jsonify({"ok": bool(user), "user": user}), 200
 
-# -------- posts --------
+# ===== Posts =====
 @app.get("/api/posts")
 def list_posts():
     with _lock, _conn() as con:
@@ -196,12 +187,12 @@ def list_posts():
 
 @app.post("/api/posts")
 def add_post():
-    data = _read_json()
-    text   = _clean(data.get("text")   or "")
-    target = _clean(data.get("target") or "")
-    tag    = _clean(data.get("tag")    or "")
-    bg     = _clean(data.get("bg")     or "")
-    scope  = _clean(data.get("scope")  or "public") or "public"
+    data = request.get_json(silent=True) or {}
+    text   = (data.get("text")   or "").strip()
+    target = (data.get("target") or "").strip()
+    tag    = (data.get("tag")    or "").strip()
+    bg     = (data.get("bg")     or "").strip()
+    scope  = (data.get("scope")  or "public").strip()
 
     if not text:
         return jsonify({"error": "text is required"}), 400
@@ -220,10 +211,10 @@ def add_post():
         row = dict(con.execute("SELECT * FROM posts WHERE id=?", (new_id,)).fetchone())
     return jsonify(row), 201
 
-# -------- comments --------
+# ===== Comments =====
 @app.get("/api/comments")
 def list_comments():
-    post_id = (request.args.get("postId", "") or "").strip()
+    post_id = request.args.get("postId", "").strip()
     with _lock, _conn() as con:
         if post_id:
             cur = con.execute(
@@ -237,9 +228,9 @@ def list_comments():
 
 @app.post("/api/comments")
 def add_comment():
-    data = _read_json()
-    post_id = _clean(str(data.get("postId") or ""))
-    text    = _clean(data.get("text") or "")
+    data = request.get_json(silent=True) or {}
+    post_id = str(data.get("postId") or "").strip()
+    text    = (data.get("text") or "").strip()
 
     if not post_id.isdigit():
         return jsonify({"error": "postId is required"}), 400
@@ -263,9 +254,40 @@ def add_comment():
         row = dict(con.execute("SELECT * FROM comments WHERE id=?", (new_id,)).fetchone())
     return jsonify(row), 201
 
+# ===== ヘルスチェック / バージョン確認 =====
 @app.get("/api/health")
 def health():
     return jsonify({"ok": True}), 200
+
+@app.get("/api/ping")
+def ping():
+    return jsonify({"ok": True, "version": "login-fallback-v3"}), 200
+
+# ===== デバッグ用（任意） =====
+@app.post("/api/_debug_login")
+def _debug_login():
+    if not os.environ.get("DEBUG_LOGIN"):
+        return jsonify({"ok": False, "error": "disabled"}), 403
+    d = request.get_json(silent=True) or {}
+    email_in = (d.get("email") or "")
+    password_in = (d.get("password") or "")
+    email_norm = _norm_email(email_in)
+    pw_norm = _norm_pw(password_in)
+    with _lock, _conn() as con:
+        row_n = con.execute("SELECT id,password_hash FROM users WHERE email=?", (email_norm,)).fetchone()
+        row_r = con.execute("SELECT id,password_hash FROM users WHERE email=?", (email_in.strip(),)).fetchone()
+    def chk(r, pw): 
+        try: return bool(r and check_password_hash(r["password_hash"], pw))
+        except: return False
+    return jsonify({
+        "ok": True,
+        "email_in": email_in,
+        "email_norm": email_norm,
+        "found_norm": bool(row_n),
+        "found_raw": bool(row_r),
+        "pw_check_raw": chk(row_n or row_r, password_in),
+        "pw_check_norm": chk(row_n or row_r, pw_norm),
+    })
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 3000))
