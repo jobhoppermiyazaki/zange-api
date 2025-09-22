@@ -14,6 +14,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <link rel="stylesheet" href="style.css">
   <meta name="color-scheme" content="light">
+
+  <!-- ★ 背景サムネ用の最小CSSを追加（既存スタイルは維持） -->
+  <style>
+    /* タイムラインカード内の背景サムネ（16:9） */
+    .zange-post .hero{
+      width:100%;
+      aspect-ratio:16/9;
+      background:#f3f4f6 center/cover no-repeat;
+      border-radius:12px 12px 0 0;
+    }
+    /* 余白が無いテーマ向けの保険 */
+    .zange-post .post-body{ padding:12px }
+    .zange-post .post-meta{
+      font-size:12px; color:#6b7280; margin-top:6px;
+      display:flex; gap:6px; flex-wrap:wrap
+    }
+  </style>
 </head>
 <body>
   <header>
@@ -70,11 +87,17 @@
       const hh=('0'+d.getHours()).slice(-2), mm=('0'+d.getMinutes()).slice(-2);
       return `${y}/${m}/${dd} ${hh}:${mm}`;
     }
+    // ★ 相対パスの背景名（bg1.jpg 等）を images/ 配下に解決。http(s) はそのまま。
+    function resolveBgUrl(bg){
+      if (!bg) return '';
+      if (/^https?:\/\//i.test(bg)) return bg;
+      return 'images/' + String(bg).replace(/^\/+/, '');
+    }
     async function fetchJsonWithFallback(urls, init){
       let last; for (const u of urls){
         try{
           const url = u + (u.includes('?')?'&':'?') + '_t='+Date.now();
-          const res = await fetch(url, Object.assign({ cache:'no-store' }, init||{}));
+          const res = await fetch(url, Object.assign({ cache:'no-store', credentials:'include' }, init||{}));
           if (!res.ok) throw new Error('HTTP '+res.status);
           return await res.json();
         }catch(e){ last=e; }
@@ -119,7 +142,8 @@
       filtered.forEach(p=>{
         const card = document.createElement('article');
         card.className = 'card zange-post';
-        const bg = p.bg ? (p.bg.startsWith('http')?p.bg:('images/'+p.bg)) : '';
+        // ★ ここを resolveBgUrl に差し替え（以前は単純な 'images/'+p.bg ）
+        const bg = resolveBgUrl(p.bg || '');
         card.innerHTML = `
           ${bg?`<div class="hero" style="background-image:url('${escapeHTML(bg)}')"></div>`:''}
           <div class="post-body">${escapeHTML(p.text||'')}</div>
