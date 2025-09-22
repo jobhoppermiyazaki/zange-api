@@ -1,59 +1,44 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <!-- RenderのAPIを使う -->
-  <script>window.ZANGE_API_BASE = "https://zange-api.onrender.com/api/posts";</script>
+  <script>
+    window.ZANGE_API_BASES = [
+      location.origin.replace(/\/+$/,'') + '/api/posts',
+      'api/posts',
+      '/api/posts'
+    ];
+  </script>
   <meta charset="UTF-8" />
   <title>zange - 投稿する</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <link rel="stylesheet" href="style.css" />
   <style>
     .bg-picker { display:flex; flex-wrap:wrap; gap:12px; }
-    .bg-thumb{
-      width:96px; height:96px; border-radius:14px;
-      border:2px solid #eee; background:#fff center/cover no-repeat;
-      display:inline-flex; align-items:center; justify-content:center;
-      box-shadow:0 1px 4px rgba(0,0,0,.06); cursor:pointer;
-    }
+    .bg-thumb{ width:96px; height:96px; border-radius:14px; border:2px solid #eee; background:#fff center/cover no-repeat; display:inline-flex; align-items:center; justify-content:center; box-shadow:0 1px 4px rgba(0,0,0,.06); cursor:pointer; }
     .bg-thumb.selected{ border-color:#f59e0b; box-shadow:0 0 0 3px rgba(245,158,11,.2); }
-    .bg-thumb.bg-none{
-      font-weight:700; color:#6b7280;
-      background:repeating-linear-gradient(45deg,#f9fafb,#f9fafb 10px,#f3f4f6 10px,#f3f4f6 20px);
-    }
+    .bg-thumb.bg-none{ font-weight:700; color:#6b7280; background:repeating-linear-gradient(45deg,#f9fafb,#f9fafb 10px,#f3f4f6 10px,#f3f4f6 20px); }
   </style>
 </head>
 <body>
   <header>
     <div style="display:flex; align-items:center; justify-content:space-between;">
       <h1><a href="index.html" style="text-decoration:none; color:inherit;">zange</a></h1>
-      <!-- ログイン状態が表示される -->
       <span id="currentUserIcon"></span>
     </div>
   </header>
 
   <main>
-    <form id="postForm">
+    <form id="postForm" autocomplete="off">
       <label>投稿内容</label>
-      <textarea id="zangeText" rows="4" placeholder="例）帰宅はバスって言ったけど、実はタクシー使っちゃった…"></textarea>
+      <textarea id="zangeText" rows="4" required placeholder="例）帰宅はバスって言ったけど、実はタクシー使っちゃった…"></textarea>
 
       <label>誰に（必須）</label>
-      <select id="zangeTargetFixed">
+      <select id="zangeTargetFixed" required>
         <option value="" selected>選択してください</option>
-        <option value="自分">自分</option>
-        <option value="親友">親友</option>
-        <option value="友達">友達</option>
-        <option value="彼女・彼氏">彼女・彼氏</option>
-        <option value="妻">妻</option>
-        <option value="夫">夫</option>
-        <option value="パートナー">パートナー</option>
-        <option value="父">父</option>
-        <option value="母">母</option>
-        <option value="祖父母">祖父母</option>
-        <option value="先生">先生</option>
-        <option value="上司">上司</option>
-        <option value="先輩">先輩</option>
-        <option value="後輩">後輩</option>
-        <option value="部下">部下</option>
+        <option>自分</option><option>親友</option><option>友達</option><option>彼女・彼氏</option>
+        <option>妻</option><option>夫</option><option>パートナー</option><option>父</option>
+        <option>母</option><option>祖父母</option><option>先生</option><option>上司</option>
+        <option>先輩</option><option>後輩</option><option>部下</option>
       </select>
 
       <label>タグ（任意）</label>
@@ -62,15 +47,15 @@
       <label>背景画像を選択</label>
       <input type="hidden" id="zangeBg" value="">
       <div class="bg-picker" id="bgPicker">
-        <button type="button" class="bg-thumb bg-none selected" data-bg="" aria-label="背景なし">なし</button>
-        <button type="button" class="bg-thumb" data-bg="bg1.jpg" style="background-image:url('images/bg1.jpg')" aria-label="背景1"></button>
-        <button type="button" class="bg-thumb" data-bg="bg2.jpg" style="background-image:url('images/bg2.jpg')" aria-label="背景2"></button>
-        <button type="button" class="bg-thumb" data-bg="bg3.jpg" style="background-image:url('images/bg3.jpg')" aria-label="背景3"></button>
-        <button type="button" class="bg-thumb" data-bg="bg4.jpg" style="background-image:url('images/bg4.jpg')" aria-label="背景4"></button>
-        <button type="button" class="bg-thumb" data-bg="bg5.jpg" style="background-image:url('images/bg5.jpg')" aria-label="背景5"></button>
-        <button type="button" class="bg-thumb" data-bg="bg6.jpg" style="background-image:url('images/bg6.jpg')" aria-label="背景6"></button>
-        <button type="button" class="bg-thumb" data-bg="bg7.jpg" style="background-image:url('images/bg7.jpg')" aria-label="背景7"></button>
-        <button type="button" class="bg-thumb" data-bg="bg8.jpg" style="background-image:url('images/bg8.jpg')" aria-label="背景8"></button>
+        <button type="button" class="bg-thumb bg-none selected" data-bg="">なし</button>
+        <button type="button" class="bg-thumb" data-bg="bg1.jpg" style="background-image:url('images/bg1.jpg')"></button>
+        <button type="button" class="bg-thumb" data-bg="bg2.jpg" style="background-image:url('images/bg2.jpg')"></button>
+        <button type="button" class="bg-thumb" data-bg="bg3.jpg" style="background-image:url('images/bg3.jpg')"></button>
+        <button type="button" class="bg-thumb" data-bg="bg4.jpg" style="background-image:url('images/bg4.jpg')"></button>
+        <button type="button" class="bg-thumb" data-bg="bg5.jpg" style="background-image:url('images/bg5.jpg')"></button>
+        <button type="button" class="bg-thumb" data-bg="bg6.jpg" style="background-image:url('images/bg6.jpg')"></button>
+        <button type="button" class="bg-thumb" data-bg="bg7.jpg" style="background-image:url('images/bg7.jpg')"></button>
+        <button type="button" class="bg-thumb" data-bg="bg8.jpg" style="background-image:url('images/bg8.jpg')"></button>
       </div>
 
       <label>公開範囲</label>
@@ -86,68 +71,40 @@
   </main>
 
   <script>
-    const API_ENDPOINTS = [
-      window.ZANGE_API_BASE,
-      location.origin.replace(/\/+$/,'') + '/api/posts',
-      'api/posts',
-      '/api/posts'
-    ].filter(Boolean);
+    function escapeHTML(s){ return (s||"").replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m])); }
 
-    async function postJsonWithFallback(data){
-      let lastErr;
-      for (const url of API_ENDPOINTS){
+    async function postJson(data){
+      let last;
+      for (const base of window.ZANGE_API_BASES){
         try{
-          const u = url + (url.includes('?')?'&':'?') + '_t=' + Date.now();
+          const u = base + (base.includes('?')?'&':'?') + '_t='+Date.now();
           const res = await fetch(u, {
             method:'POST',
             headers:{'Content-Type':'application/json'},
             body: JSON.stringify(data),
             cache:'no-store',
-            credentials:'include'
+            credentials:'include'   // セッション送信
           });
           if (!res.ok) throw new Error('HTTP '+res.status);
           return await res.json();
-        }catch(e){ lastErr = e; }
+        }catch(e){ last=e; }
       }
-      throw lastErr || new Error('API error');
-    }
-
-    function saveLocalFallback(post) {
-      try {
-        const key = 'zange_posts';
-        const arr = JSON.parse(localStorage.getItem(key) || '[]');
-        const maxId = arr.reduce((m, p) => Math.max(m, Number(p.id||0)), 0) || 0;
-        arr.push({
-          id: maxId + 1,
-          text: post.text || "",
-          author: "匿名",  // ローカル保存時のみ匿名
-          createdAt: new Date().toISOString(),
-          target: post.target || "",
-          tag: post.tag || "",
-          bg: post.bg || "",
-          scope: post.scope || "public"
-        });
-        localStorage.setItem(key, JSON.stringify(arr));
-      } catch(e) { console.warn('local fallback failed:', e); }
+      throw last || new Error('API error');
     }
 
     (function setupBgPicker(){
       const picker = document.getElementById('bgPicker');
       const hidden = document.getElementById('zangeBg');
-      if (!picker || !hidden) return;
       picker.addEventListener('click', (e)=>{
-        const btn = e.target.closest('.bg-thumb');
-        if (!btn) return;
+        const btn = e.target.closest('.bg-thumb'); if (!btn) return;
         picker.querySelectorAll('.bg-thumb').forEach(b=>b.classList.remove('selected'));
-        btn.classList.add('selected');
-        hidden.value = btn.getAttribute('data-bg') || '';
+        btn.classList.add('selected'); hidden.value = btn.getAttribute('data-bg') || '';
       });
     })();
 
     (function setupSubmit(){
       const form = document.getElementById('postForm');
       const submitBtn = document.getElementById('submitBtn');
-      if (!form) return;
 
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
@@ -160,57 +117,29 @@
         if (!text){ alert('投稿内容を入力してください'); return; }
         if (!target){ alert('「誰に」を選択してください'); return; }
 
-        const payload = { text, target, tag, bg, scope };
-        // authorは送らず、サーバーがsessionから補完
-
-        const originalLabel = submitBtn.textContent;
-        submitBtn.disabled = true;
-        submitBtn.textContent = '投稿中…';
-
+        submitBtn.disabled = true; const original = submitBtn.textContent; submitBtn.textContent = '投稿中…';
         try{
-          await postJsonWithFallback(payload);
+          await postJson({ text, target, tag, bg, scope });   // author はサーバで決定
+          location.href = 'index.html';
         }catch(e){
-          console.warn('API save failed, fallback to localStorage:', e?.message || e);
-          saveLocalFallback(payload);
+          alert('投稿に失敗しました。通信環境をご確認のうえ、もう一度お試しください。\\n詳細: ' + (e?.message||e));
         }finally{
-          submitBtn.disabled = false;
-          submitBtn.textContent = originalLabel;
+          submitBtn.disabled = false; submitBtn.textContent = original;
         }
-
-        location.href = 'index.html';
       });
     })();
 
-    // ★ ログイン状態の表示を追加
+    // ユーザー表示（ログアウトボタンは出さない）
     async function renderUserIcon() {
       const box = document.getElementById("currentUserIcon");
-      if (!box) return;
       try {
-        const res = await fetch("/api/me", { credentials: "include", cache: "no-store" });
+        const res = await fetch("/api/me", { credentials:"include", cache:"no-store" });
         const data = await res.json();
-        if (data.ok && data.user) {
-          const name = data.user.nickname || data.user.email;
-          box.innerHTML = `
-            <span style="display:inline-flex;align-items:center;gap:8px;">
-              <span class="pill" style="padding:6px 10px;border-radius:999px;background:#f1f5f9;">
-                👤 ${escapeHTML(name)}
-              </span>
-              <button id="logoutBtn" style="padding:6px 10px;border-radius:10px;border:1px solid #e6e6e6;background:#fff;cursor:pointer">
-                ログアウト
-              </button>
-            </span>`;
-          document.getElementById("logoutBtn")?.addEventListener("click", async () => {
-            await fetch("/api/logout", { method: "POST", credentials: "include" });
-            renderUserIcon();
-          });
-        } else {
-          box.innerHTML = `<a href="login.html">ログイン</a>`;
-        }
-      } catch {
-        box.innerHTML = `<a href="login.html">ログイン</a>`;
-      }
+        box.innerHTML = (data.ok && data.user)
+          ? `<span class="pill" style="padding:6px 10px;border-radius:999px;background:#f1f5f9;">👤 ${escapeHTML(data.user.nickname || data.user.email)}</span>`
+          : `<a href="login.html">ログイン</a>`;
+      } catch { box.innerHTML = `<a href="login.html">ログイン</a>`; }
     }
-    function escapeHTML(s){ return (s||"").replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m])); }
     document.addEventListener("DOMContentLoaded", renderUserIcon);
   </script>
 
@@ -226,9 +155,7 @@
       <a href="about.html"><span class="icon">📕</span><span class="label">概要</span></a>
     </nav>
   </footer>
-
   <footer>&copy; 2025 zange (テスト公開中)</footer>
-
   <script src="script.js"></script>
 </body>
 </html>
