@@ -1,13 +1,17 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <!-- APIベースURLを Render 環境に合わせて動的に決定 -->
+  <!-- 同一オリジン優先で API ベース決定 -->
   <script>
-    window.ZANGE_API_BASE = location.origin.replace(/\/+$/, '') + "/api/posts";
+    window.ZANGE_API_BASES = [
+      location.origin.replace(/\/+$/,'') + '/api/posts',
+      'api/posts',
+      '/api/posts'
+    ];
   </script>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta charset="UTF-8">
   <title>zange- タイムライン</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <link rel="stylesheet" href="style.css">
   <meta name="color-scheme" content="light">
 </head>
@@ -15,7 +19,6 @@
   <header>
     <div style="display:flex; align-items:center; justify-content:space-between;">
       <h1><a href="index.html" style="text-decoration:none; color:inherit;">zange</a></h1>
-      <!-- ログイン状態が表示される -->
       <span id="currentUserIcon"></span>
     </div>
   </header>
@@ -30,78 +33,15 @@
     <div id="todayTopics" class="topics-row"></div>
   </div>
 
-  <script>
-    (function renderTopics(){
-      const topics = ["つい買ってしまったもの","パートナーに言えなかったこと","仕事でやらかした小さな失敗","食欲に負けた瞬間","お金の使いすぎ反省"];
-      const host = document.getElementById('todayTopics');
-      host.innerHTML = '';
-      topics.forEach(t => {
-        const chip = document.createElement('div');
-        chip.className = 'topic-chip';
-        chip.innerHTML = `
-          <span class="t-label">#${t}</span>
-          <a class="t-post" href="post.html?topic=${encodeURIComponent(t)}">🙏</a>
-        `;
-        host.appendChild(chip);
-      });
-    })();
-  </script>
-
-  <main class="container">
+  <main class="container" style="padding-bottom:90px">
     <section class="card">
-      <input type="text" placeholder="キーワードでさがす（本文・対象・タグ）" />
+      <input id="kw" type="text" placeholder="キーワードでさがす（本文・対象・タグ）" />
     </section>
     <section id="timeline"></section>
   </main>
 
-  <!-- 既存スクリプト -->
-  <script src="script.js"></script>
-
-  <!-- ★ ログイン状態の表示スクリプトを追加 -->
-  <script>
-    async function renderUserIcon() {
-      const box = document.getElementById("currentUserIcon");
-      if (!box) return;
-
-      try {
-        const res = await fetch("/api/me", { credentials: "include", cache: "no-store" });
-        const data = await res.json();
-
-        if (data.ok && data.user) {
-          const name = data.user.nickname || data.user.email;
-          box.innerHTML = `
-            <span style="display:inline-flex;align-items:center;gap:8px;">
-              <span class="pill" style="padding:6px 10px;border-radius:999px;background:#f1f5f9;">
-                👤 ${escapeHTML(name)}
-              </span>
-              <button id="logoutBtn" style="padding:6px 10px;border-radius:10px;border:1px solid #e6e6e6;background:#fff;cursor:pointer">
-                ログアウト
-              </button>
-            </span>
-          `;
-          document.getElementById("logoutBtn")?.addEventListener("click", async () => {
-            await fetch("/api/logout", { method: "POST", credentials: "include" });
-            renderUserIcon();
-          });
-        } else {
-          box.innerHTML = `<a href="login.html" style="text-decoration:none;">ログイン</a>`;
-        }
-      } catch (e) {
-        console.warn("me fetch error:", e);
-        box.innerHTML = `<a href="login.html" style="text-decoration:none;">ログイン</a>`;
-      }
-    }
-
-    function escapeHTML(s){ return (s||"").replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m])); }
-
-    document.addEventListener("DOMContentLoaded", renderUserIcon);
-  </script>
-
-  <!-- 状態表示 -->
-  <div id="apiStatus" style="position:sticky;top:0;z-index:9;font:12px/1.4 system-ui;background:#e7f5ff;border:1px solid #a5d8ff;padding:6px 8px;display:none"></div>
-
-  <!-- 以下は既存のタイムライン更新などのスクリプト … -->
-  <!-- （省略：あなたが貼ってくれた index.html のまま残してOK） -->
+  <!-- 状態表示（APIエラー時のみ表示） -->
+  <div id="apiStatus" style="position:sticky;bottom:90px;z-index:9;font:12px/1.4 system-ui;background:#fff3bf;border:1px solid #ffe066;padding:6px 8px;display:none;border-radius:8px;margin:8px"></div>
 
   <footer class="mobile-tabbar">
     <nav>
@@ -115,17 +55,112 @@
       <a href="about.html"><span class="icon">📕</span><span class="label">概要</span></a>
     </nav>
   </footer>
-
   <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
 
   <footer>&copy; 2025 zange (テスト公開中)</footer>
 
-  <div id="stampModalBackdrop" class="stamp-modal-backdrop" aria-hidden="true">
-    <div class="stamp-modal" role="dialog" aria-modal="true" aria-labelledby="stampModalTitle">
-      <h3 id="stampModalTitle">スタンプを選ぶ</h3>
-      <div id="stampGrid" class="stamp-grid"></div>
-      <div class="row-end"><button type="button" class="btn-close" onclick="closeStampPicker()">閉じる</button></div>
-    </div>
-  </div>
+  <script src="script.js"></script>
+  <script>
+    /* ========== ユーティリティ ========== */
+    function escapeHTML(s){ return (s||"").replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m])); }
+    function fmtDate(iso){
+      if (typeof formatDate === 'function') return formatDate(iso);
+      const d = new Date(iso||''); if (isNaN(d)) return '';
+      const y=d.getFullYear(), m=('0'+(d.getMonth()+1)).slice(-2), dd=('0'+d.getDate()).slice(-2);
+      const hh=('0'+d.getHours()).slice(-2), mm=('0'+d.getMinutes()).slice(-2);
+      return `${y}/${m}/${dd} ${hh}:${mm}`;
+    }
+    async function fetchJsonWithFallback(urls, init){
+      let last; for (const u of urls){
+        try{
+          const url = u + (u.includes('?')?'&':'?') + '_t='+Date.now();
+          const res = await fetch(url, Object.assign({ cache:'no-store' }, init||{}));
+          if (!res.ok) throw new Error('HTTP '+res.status);
+          return await res.json();
+        }catch(e){ last=e; }
+      }
+      throw last || new Error('fetch failed');
+    }
+    function showApiStatus(msg){
+      const el = document.getElementById('apiStatus');
+      if (!el) return; el.textContent = msg; el.style.display='block';
+    }
+
+    /* ========== 今日のトピック ========== */
+    (function renderTopics(){
+      const topics = ["つい買ってしまったもの","パートナーに言えなかったこと","仕事でやらかした小さな失敗","食欲に負けた瞬間","お金の使いすぎ反省"];
+      const host = document.getElementById('todayTopics');
+      host.innerHTML = '';
+      topics.forEach(t => {
+        const chip = document.createElement('div');
+        chip.className = 'topic-chip';
+        chip.innerHTML = `<span class="t-label">#${t}</span><a class="t-post" href="post.html?topic=${encodeURIComponent(t)}">🙏</a>`;
+        host.appendChild(chip);
+      });
+    })();
+
+    /* ========== 投稿一覧（サーバーのみ） ========== */
+    async function loadPosts(){
+      const posts = await fetchJsonWithFallback(window.ZANGE_API_BASES, { method:'GET' });
+      return Array.isArray(posts) ? posts : [];
+    }
+    function renderPosts(posts){
+      const q = (document.getElementById('kw')?.value || '').trim();
+      const host = document.getElementById('timeline');
+      host.innerHTML = '';
+      const filtered = !q ? posts : posts.filter(p=>{
+        const hay = `${p.text||''} ${p.target||''} ${p.tag||''}`.toLowerCase();
+        return hay.includes(q.toLowerCase());
+      });
+      if (!filtered.length){
+        host.innerHTML = `<div class="card muted">投稿がありません。</div>`;
+        return;
+      }
+      filtered.forEach(p=>{
+        const card = document.createElement('article');
+        card.className = 'card zange-post';
+        const bg = p.bg ? (p.bg.startsWith('http')?p.bg:('images/'+p.bg)) : '';
+        card.innerHTML = `
+          ${bg?`<div class="hero" style="background-image:url('${escapeHTML(bg)}')"></div>`:''}
+          <div class="post-body">${escapeHTML(p.text||'')}</div>
+          <div class="post-meta">
+            <span>by ${escapeHTML(p.author||'匿名')}</span>
+            ${p.target?`<span class="pill">対象:${escapeHTML(p.target)}</span>`:''}
+            ${p.tag?`<span class="pill">タグ:${escapeHTML(p.tag)}</span>`:''}
+            <span>${fmtDate(p.createdAt||p.date)}</span>
+            <a class="pill" href="detail.html?id=${encodeURIComponent(p.id)}">詳細</a>
+          </div>`;
+        host.appendChild(card);
+      });
+    }
+    async function refresh(){
+      try{
+        const posts = await loadPosts();
+        renderPosts(posts);
+      }catch(e){
+        showApiStatus('APIエラーで投稿を取得できませんでした。通信環境をご確認ください。');
+      }
+    }
+    document.getElementById('kw')?.addEventListener('input', refresh);
+
+    /* ========== ログイン表示 ========== */
+    async function renderUserIcon() {
+      const box = document.getElementById("currentUserIcon"); if (!box) return;
+      try {
+        const res = await fetch("/api/me", { credentials: "include", cache: "no-store" });
+        const data = await res.json();
+        if (data.ok && data.user) {
+          const name = data.user.nickname || data.user.email;
+          box.innerHTML = `<span class="pill" style="padding:6px 10px;border-radius:999px;background:#f1f5f9;">👤 ${escapeHTML(name)}</span>`;
+        } else {
+          box.innerHTML = `<a href="login.html" style="text-decoration:none;">ログイン</a>`;
+        }
+      } catch {
+        box.innerHTML = `<a href="login.html" style="text-decoration:none;">ログイン</a>`;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', ()=>{ renderUserIcon(); refresh(); });
+  </script>
 </body>
 </html>
