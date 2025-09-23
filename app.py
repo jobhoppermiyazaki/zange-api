@@ -41,6 +41,18 @@ if os.environ.get("RENDER"):  # Render/https 環境なら Secure をON
 
 _lock = threading.Lock()
 
+# 画面と対応するリアクション一覧（キー: 表示ラベル）
+ALLOWED_REACTIONS = {
+    "pray": "🙏",
+    "laugh": "😂",
+    "handshake": "🤝",
+    "seed": "🌱",
+    "www": "WWW",
+    "hou": "ほう",
+    "eh":  "え?",
+    "n":   "ん?",
+}
+
 # ===== DB接続 =====
 def _conn():
     # shared cache を避け、busy を減らすための基本設定
@@ -84,11 +96,22 @@ def _init_db():
           nickname TEXT,
           createdAt TEXT
         )""")
-        # 簡易マイグレーション
+        # ▼ リアクション集計テーブル（postId × rkey でユニーク）
+        con.execute("""
+        CREATE TABLE IF NOT EXISTS reactions (
+          postId INTEGER NOT NULL,
+          rkey   TEXT    NOT NULL,
+          count  INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (postId, rkey),
+          FOREIGN KEY(postId) REFERENCES posts(id)
+        )""")
+
+        # 簡易マイグレーション例
         try:
             con.execute("SELECT createdAt FROM users LIMIT 1;")
         except sqlite3.OperationalError:
             con.execute("ALTER TABLE users ADD COLUMN createdAt TEXT;")
+
         con.commit()
 _init_db()
 
@@ -288,6 +311,53 @@ def add_comment():
         row = dict(con.execute("SELECT * FROM comments WHERE id=?", (new_id,)).fetchone())
     return jsonify(row), 201
 
+# ===== Reactions（スタンプ集計）=====
+@app.get("/api/reactions")
+def api_get_reactions():
+    """指定ポストのリアクション合計を返す"""
+    post_id = request.args.get("postId", "").strip()
+    if not post_id.isdigit():
+        return jsonify({"ok": False, "error": "postId required"}), 400
+    with _lock, _conn() as con:
+        rows = con.execute(
+            "SELECT rkey, count FROM reactions WHERE postId=?",
+            (int(post_id),)
+        ).fetchall()
+    counts = {r["rkey"]: r["count"] for r in rows}
+    return jsonify({"ok": True, "postId": int(post_id), "counts": counts}), 200
+
+@app.post("/api/reactions")
+def api_add_reaction():
+    """指定ポストの指定リアクションを +1（誰でもOKな集計）"""
+    data = request.get_json(silent=True) or {}
+    post_id = str(data.get("postId") or "").strip()
+    rkey    = str(data.get("key") or "").strip()
+    if not post_id.isdigit() or rkey not in ALLOWED_REACTIONS:
+        return jsonify({"ok": False, "error": "bad request"}), 400
+
+    with _lock, _conn() as con:
+        # ポスト存在チェック
+        ex = con.execute("SELECT 1 FROM posts WHERE id=?", (int(post_id),)).fetchone()
+        if not ex:
+            return jsonify({"ok": False, "error": "post not found"}), 404
+
+        # レコードを用意してからインクリメント
+        con.execute(
+            "INSERT OR IGNORE INTO reactions(postId, rkey, count) VALUES (?,?,0)",
+            (int(post_id), rkey)
+        )
+        con.execute(
+            "UPDATE reactions SET count = count + 1 WHERE postId=? AND rkey=?",
+            (int(post_id), rkey)
+        )
+        con.commit()
+        new_count = con.execute(
+            "SELECT count FROM reactions WHERE postId=? AND rkey=?",
+            (int(post_id), rkey)
+        ).fetchone()["count"]
+
+    return jsonify({"ok": True, "postId": int(post_id), "key": rkey, "count": new_count}), 200
+
 # ===== ヘルスチェック / バージョン確認 =====
 @app.get("/api/health")
 def health():
@@ -296,7 +366,7 @@ def health():
 @app.get("/api/ping")
 def ping():
     # “新しいコードが動いている”ことを確認する印
-    return jsonify({"ok": True, "version": "disk-persist-v1"}), 200
+    return jsonify({"ok": True, "version": "reactions-v1"}), 200
 
 # ===== デバッグ系：状態確認 =====
 @app.get("/api/diag")
