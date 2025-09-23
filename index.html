@@ -63,6 +63,7 @@
     }
     .rx .e{ font-size:22px; line-height:1 }
     .rx .c{ font-size:16px; opacity:.9 }
+    .rx .rx-img{ width:22px; height:22px; object-fit:contain; display:none; }
     .rx-add{
       margin-left:auto;
       display:inline-flex; align-items:center; gap:6px;
@@ -71,7 +72,6 @@
       font-weight:800;
     }
     .rx-add .plus{ font-size:18px; line-height:1 }
-    /* 詳細リンク（右下に自然に収まるように） */
     .feed-footer{
       display:flex; justify-content:flex-end;
       padding:0 16px 16px;
@@ -81,7 +81,6 @@
       padding:6px 10px; border-radius:8px;
       background:#f7fbff; border:1px solid #e6f0ff;
     }
-    /* 画像がない場合は代替の薄背景 */
     .feed-visual.placeholder{ background:#f3f4f6; aspect-ratio:16/9; }
 
     /* ▼ スタンプ画像（ピッカー表示用） */
@@ -198,6 +197,29 @@
       {key:'n',         label:'ん?'}
     ];
 
+    // 画像ファイル名との対応（方法②：/stamps 配下の PNG 等）
+    function keyToBasename(key){
+      switch(key){
+        case 'www': return 'wwww';
+        case 'hou': return 'ho';
+        case 'eh' : return 'e';
+        case 'n'  : return 'n';
+        default   : return null; // 画像なし（絵文字のまま）
+      }
+    }
+    const STAMP_BASE = '/stamps';
+    function stampCandidatesByKey(key){
+      const base = keyToBasename(key);
+      if(!base) return []; // 絵文字系
+      const b = encodeURIComponent(base);
+      return [
+        `${STAMP_BASE}/${b}.png`,
+        `${STAMP_BASE}/${b}.webp`,
+        `${STAMP_BASE}/${b}.jpg`,
+        `${STAMP_BASE}/${b}.jpeg`
+      ];
+    }
+
     // 1件のカードに対し現在のリアクション集計を読み込み反映
     async function hydrateReactions(postId, card){
       try{
@@ -210,6 +232,8 @@
           if (cEl) cEl.textContent = counts[k] ? String(counts[k]) : '0';
         });
       }catch(_e){}
+      // 数字反映後にアイコンのスキンを適用
+      skinReactionImages(card);
     }
 
     // +1 して表示更新
@@ -226,6 +250,22 @@
           counterEl.textContent = String(data.count);
         }
       }catch(_e){}
+    }
+
+    // テキスト系スタンプを画像に差し替える（画像が取れた場合のみ）
+    function skinReactionImages(container){
+      container.querySelectorAll('.rx[data-rkey]').forEach(rx=>{
+        const key = rx.getAttribute('data-rkey');
+        const cands = stampCandidatesByKey(key);
+        if (!cands.length) return; // 絵文字のまま
+
+        let i = 0;
+        const img = rx.querySelector('.rx-img') || (()=>{ const im=document.createElement('img'); im.className='rx-img'; rx.insertBefore(im, rx.firstChild); return im; })();
+        const textEl = rx.querySelector('.e');
+        img.onload = ()=>{ img.style.display='inline-block'; if(textEl) textEl.style.display='none'; };
+        img.onerror = ()=>{ i++; if(i<cands.length){ img.src=cands[i]; } else { img.style.display='none'; if(textEl) textEl.style.display='inline'; } };
+        img.src = cands[0];
+      });
     }
 
     // スクショ風描画：カードHTML＋反応クリック
@@ -257,6 +297,7 @@
 
         const rxHtml = REACTION_DEF.map(rx =>
           `<span class="rx" role="button" tabindex="0" aria-label="${rx.label}を送る" data-rkey="${rx.key}">
+             <img class="rx-img" alt="" />
              <span class="e">${rx.label}</span><span class="c">0</span>
            </span>`
         ).join('');
@@ -292,7 +333,8 @@
         `;
         host.appendChild(card);
 
-        // 初期集計を反映
+        // 画像スキン適用 & 初期集計
+        skinReactionImages(card);
         hydrateReactions(p.id, card);
       });
     }
@@ -361,18 +403,6 @@
     // ——— ここから (B) 追加スタンプ用モーダル ———
     const EXTRA_REACTIONS = REACTION_DEF; // ひとまず全種類から選べる
 
-    /* ▼ 画像ベースディレクトリ（方法②：/stamps を参照） */
-    const STAMP_BASE = '/stamps';
-    function stampCandidates(key){
-      const k = encodeURIComponent(key);
-      return [
-        `${STAMP_BASE}/${k}.png`,   // ← PNG が実体
-        `${STAMP_BASE}/${k}.webp`,  // フォールバック1
-        `${STAMP_BASE}/${k}.jpg`,   // フォールバック2
-        `${STAMP_BASE}/${k}.jpeg`   // フォールバック3
-      ];
-    }
-
     function openStampPicker(postId){
       const backdrop = document.getElementById('stampModal');
       backdrop.style.display = 'block';
@@ -387,10 +417,10 @@
         item.className = 'stamp-item';
         item.setAttribute('data-rkey', rx.key);
 
-        // 画像（PNG優先）→ダメなら webp/jpg/jpeg → 最後に絵文字
+        // 画像（PNG優先）→webp/jpg/jpeg → 最後にテキスト
         const img = document.createElement('img');
         img.alt = rx.label;
-        const cands = stampCandidates(rx.key);
+        const cands = stampCandidatesByKey(rx.key);
         let i = 0;
         img.onerror = () => {
           i++;
@@ -400,9 +430,13 @@
             item.innerHTML = `<span style="font-size:28px;line-height:1">${rx.label}</span>`;
           }
         };
-        img.src = cands[0];
-
-        item.appendChild(img);
+        if (cands.length){
+          img.src = cands[0];
+          item.appendChild(img);
+        }else{
+          // 絵文字のみ
+          item.innerHTML = `<span style="font-size:28px;line-height:1">${rx.label}</span>`;
+        }
         grid.appendChild(item);
       });
     }
