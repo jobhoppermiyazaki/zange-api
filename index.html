@@ -10,7 +10,7 @@
     ];
   </script>
   <meta charset="UTF-8">
-  <title>zange- タイムライン</title>
+  <title>zange - タイムライン</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <link rel="stylesheet" href="style.css">
   <meta name="color-scheme" content="light">
@@ -18,17 +18,36 @@
   <!-- ★ 背景サムネ用の最小CSSを追加（既存スタイルは維持） -->
   <style>
     /* タイムラインカード内の背景サムネ（16:9） */
-    .zange-post .hero{
+    .post-card .post-hero{
       width:100%;
       aspect-ratio:16/9;
       background:#f3f4f6 center/cover no-repeat;
       border-radius:12px 12px 0 0;
+      position:relative;
     }
-    /* 余白が無いテーマ向けの保険 */
-    .zange-post .post-body{ padding:12px }
-    .zange-post .post-meta{
+    .post-card .post-title{
+      position:absolute;
+      left:0; right:0; bottom:0;
+      background:rgba(0,0,0,.55);
+      color:#fff;
+      padding:10px 14px;
+      font-size:clamp(16px,2.8vw,20px);
+      font-weight:700;
+      line-height:1.4;
+      border-radius:0 0 12px 12px;
+    }
+    .post-meta{
       font-size:12px; color:#6b7280; margin-top:6px;
-      display:flex; gap:6px; flex-wrap:wrap
+      display:flex; justify-content:space-between;
+      align-items:center; flex-wrap:wrap; gap:6px;
+    }
+    .post-meta .meta-left{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+    .post-meta .meta-right{margin-left:auto;}
+    .post-meta .avatar{
+      width:20px;height:20px;
+      border-radius:50%;background:#ddd;
+      display:inline-flex;align-items:center;justify-content:center;
+      font-size:12px;font-weight:700;
     }
   </style>
 </head>
@@ -87,7 +106,6 @@
       const hh=('0'+d.getHours()).slice(-2), mm=('0'+d.getMinutes()).slice(-2);
       return `${y}/${m}/${dd} ${hh}:${mm}`;
     }
-    // ★ 相対パスの背景名（bg1.jpg 等）を images/ 配下に解決。http(s) はそのまま。
     function resolveBgUrl(bg){
       if (!bg) return '';
       if (/^https?:\/\//i.test(bg)) return bg;
@@ -127,36 +145,56 @@
       const posts = await fetchJsonWithFallback(window.ZANGE_API_BASES, { method:'GET' });
       return Array.isArray(posts) ? posts : [];
     }
+
+    // ★ 新しい renderPosts
     function renderPosts(posts){
-      const q = (document.getElementById('kw')?.value || '').trim();
+      const q = (document.getElementById('kw')?.value || '').trim().toLowerCase();
       const host = document.getElementById('timeline');
       host.innerHTML = '';
+
       const filtered = !q ? posts : posts.filter(p=>{
         const hay = `${p.text||''} ${p.target||''} ${p.tag||''}`.toLowerCase();
-        return hay.includes(q.toLowerCase());
+        return hay.includes(q);
       });
+
       if (!filtered.length){
         host.innerHTML = `<div class="card muted">投稿がありません。</div>`;
         return;
       }
+
       filtered.forEach(p=>{
         const card = document.createElement('article');
-        card.className = 'card zange-post';
-        // ★ ここを resolveBgUrl に差し替え（以前は単純な 'images/'+p.bg ）
-        const bg = resolveBgUrl(p.bg || '');
+        card.className = 'post-card';
+
+        const bgUrl = resolveBgUrl(p.bg || '');
+        const heroStyle = bgUrl ? ` style="background-image:url('${escapeHTML(bgUrl)}')"` : '';
+        const author = (p.author || '匿名');
+        const avatarCh = (author.trim()[0] || '匿').toUpperCase();
+        const when = fmtDate(p.createdAt || p.date);
+
         card.innerHTML = `
-          ${bg?`<div class="hero" style="background-image:url('${escapeHTML(bg)}')"></div>`:''}
-          <div class="post-body">${escapeHTML(p.text||'')}</div>
+          <div class="post-hero"${heroStyle}>
+            <div class="post-title">${escapeHTML(p.text || '')}</div>
+          </div>
+
           <div class="post-meta">
-            <span>by ${escapeHTML(p.author||'匿名')}</span>
-            ${p.target?`<span class="pill">対象:${escapeHTML(p.target)}</span>`:''}
-            ${p.tag?`<span class="pill">タグ:${escapeHTML(p.tag)}</span>`:''}
-            <span>${fmtDate(p.createdAt||p.date)}</span>
-            <a class="pill" href="detail.html?id=${encodeURIComponent(p.id)}">詳細</a>
-          </div>`;
+            <div class="meta-left">
+              <span class="avatar" aria-hidden="true">${escapeHTML(avatarCh)}</span>
+              <span class="post-author">by ${escapeHTML(author)}</span>
+              ${p.target ? `<span class="pill">対象:${escapeHTML(p.target)}</span>` : ''}
+              ${p.tag ? `<span class="pill">タグ:${escapeHTML(p.tag)}</span>` : ''}
+              ${p.scope ? `<span class="pill">公開:${escapeHTML(p.scope)}</span>` : ''}
+              <span>・${when}</span>
+            </div>
+            <div class="meta-right">
+              <a class="btn-link" href="detail.html?id=${encodeURIComponent(p.id)}">詳細</a>
+            </div>
+          </div>
+        `;
         host.appendChild(card);
       });
     }
+
     async function refresh(){
       try{
         const posts = await loadPosts();
