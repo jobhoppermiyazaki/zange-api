@@ -361,10 +361,65 @@
     // ——— ここから (B) 追加スタンプ用モーダル ———
     const EXTRA_REACTIONS = REACTION_DEF; // ひとまず全種類から選べる
 
-    /* ▼ 画像ベースディレクトリとURL解決 */
-    const STAMP_BASE = '/images/stamps';
-    function stampSrc(key){
-      return `${STAMP_BASE}/${encodeURIComponent(key)}.webp`;
+    /* ▼ 画像探索：配置の候補ディレクトリ＆拡張子（上から順に試行） */
+    const STAMP_BASE_CANDIDATES = [
+      '/images/stamps',
+      '/images/reactions',
+      '/images',
+      '/static/images'
+    ];
+    const STAMP_EXTS = ['webp','png','jpg','jpeg'];
+
+    // 指定 key に対し <picture> を作り、webp→png…と試す。全滅なら絵文字にフォールバック。
+    function buildStampNode(key, label){
+      const filename = encodeURIComponent(key);
+      const picture = document.createElement('picture');
+      picture.dataset.candIdx = '0'; // エラー時に次の base を試すためのインデックス
+
+      // 現在の候補 base を元に source/img を差し替える
+      function applySources(baseIdx){
+        // 既存の子要素はクリアして作り直し
+        picture.innerHTML = '';
+        const base = STAMP_BASE_CANDIDATES[baseIdx].replace(/\/$/,'');
+        // webp 優先
+        const source = document.createElement('source');
+        source.type = 'image/webp';
+        source.srcset = `${base}/${filename}.webp`;
+        picture.appendChild(source);
+        // <img> は png を初期値に
+        const img = document.createElement('img');
+        img.alt = label;
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.src = `${base}/${filename}.png`;
+
+        // 画像エラー時はこの base 内で別拡張子を順に試し、それでもダメなら次の base 候補へ
+        let extIdx = 1; // png(0)はセット済みなので次から
+        img.onerror = () => {
+          if (extIdx < STAMP_EXTS.length){
+            img.src = `${base}/${filename}.${STAMP_EXTS[extIdx++]}`;
+            return;
+          }
+          // 次の base 候補へ
+          const nextBase = Number(picture.dataset.candIdx) + 1;
+          if (nextBase < STAMP_BASE_CANDIDATES.length){
+            picture.dataset.candIdx = String(nextBase);
+            applySources(nextBase);
+          } else {
+            // 最終フォールバック：絵文字
+            const span = document.createElement('span');
+            span.style.fontSize = '28px';
+            span.style.lineHeight = '1';
+            span.textContent = label;
+            picture.replaceWith(span);
+          }
+        };
+
+        picture.appendChild(img);
+      }
+
+      applySources(0);
+      return picture;
     }
 
     function openStampPicker(postId){
@@ -381,22 +436,10 @@
         item.className = 'stamp-item';
         item.setAttribute('data-rkey', rx.key);
 
-        // 画像要素（WebP → PNG → 絵文字の順にフォールバック）
-        const img = document.createElement('img');
-        img.src = stampSrc(rx.key);
-        img.alt = rx.label;
+        // ▼ 画像ノード（webp→png→jpg→jpeg、候補ディレクトリも順に）を作成
+        const node = buildStampNode(rx.key, rx.label);
+        item.appendChild(node);
 
-        img.onerror = () => {
-          if (!img.dataset.triedPng){
-            img.dataset.triedPng = '1';
-            img.src = `${STAMP_BASE}/${encodeURIComponent(rx.key)}.png`;
-          }else{
-            // 画像無い場合は絵文字表示に切替
-            item.innerHTML = `<span style="font-size:28px;line-height:1">${rx.label}</span>`;
-          }
-        };
-
-        item.appendChild(img);
         grid.appendChild(item);
       });
     }
