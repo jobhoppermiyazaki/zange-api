@@ -15,40 +15,63 @@
   <link rel="stylesheet" href="style.css">
   <meta name="color-scheme" content="light">
 
-  <!-- ★ 背景サムネ用の最小CSSを追加（既存スタイルは維持） -->
+  <!-- ★ タイムラインをスクショ風にする最小追加CSS（既存style.cssはそのまま） -->
   <style>
-    /* タイムラインカード内の背景サムネ（16:9） */
-    .post-card .post-hero{
-      width:100%;
-      aspect-ratio:16/9;
-      background:#f3f4f6 center/cover no-repeat;
-      border-radius:12px 12px 0 0;
-      position:relative;
+    .feed-card{ padding:0; overflow:hidden }
+    .feed-head{
+      display:flex; align-items:center; gap:12px;
+      padding:14px 16px;
     }
-    .post-card .post-title{
-      position:absolute;
-      left:0; right:0; bottom:0;
-      background:rgba(0,0,0,.55);
-      color:#fff;
-      padding:10px 14px;
-      font-size:clamp(16px,2.8vw,20px);
-      font-weight:700;
-      line-height:1.4;
-      border-radius:0 0 12px 12px;
+    .feed-avatar{
+      width:44px; height:44px; border-radius:50%;
+      background:#fdece9; color:#666; font-weight:900;
+      display:grid; place-items:center; flex:0 0 auto;
+      letter-spacing:.02em;
     }
-    .post-meta{
-      font-size:12px; color:#6b7280; margin-top:6px;
-      display:flex; justify-content:space-between;
-      align-items:center; flex-wrap:wrap; gap:6px;
+    .feed-username{ font-weight:800; font-size:16px }
+    .feed-visual img{
+      width:100%; height:auto; display:block;
+      border-radius:0;
+      background:#f3f4f6;
     }
-    .post-meta .meta-left{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
-    .post-meta .meta-right{margin-left:auto;}
-    .post-meta .avatar{
-      width:20px;height:20px;
-      border-radius:50%;background:#ddd;
-      display:inline-flex;align-items:center;justify-content:center;
-      font-size:12px;font-weight:700;
+    .feed-title{
+      margin:14px 16px 4px;
+      font-size: clamp(20px, 5.6vw, 28px);
+      line-height:1.35; font-weight:900;
+      letter-spacing:.2px;
     }
+    .feed-date{ color:#6b7280; font-size:13px; margin:0 16px 8px }
+    .feed-chips{ display:flex; flex-wrap:wrap; gap:8px; margin:0 16px 14px }
+    .chip{
+      display:inline-flex; align-items:center; gap:6px;
+      padding:6px 10px; border-radius:999px;
+      background:#f3f4f6; color:#111; font-weight:700;
+    }
+    .chip .ic{ font-size:16px; line-height:1 }
+    .feed-actions{
+      display:flex; flex-wrap:wrap; gap:18px 24px;
+      padding:10px 16px 14px;
+      border-top:1px solid #eee;
+    }
+    .rx{
+      display:inline-flex; align-items:center; gap:8px;
+      font-weight:800; color:#111;
+      min-width:52px;
+    }
+    .rx .e{ font-size:22px; line-height:1 }
+    .rx .c{ font-size:16px; opacity:.9 }
+    /* 詳細リンク（右下に自然に収まるように） */
+    .feed-footer{
+      display:flex; justify-content:flex-end;
+      padding:0 16px 16px;
+    }
+    .btn-link{
+      text-decoration:none; font-weight:800; color:#2f6fb0;
+      padding:6px 10px; border-radius:8px;
+      background:#f7fbff; border:1px solid #e6f0ff;
+    }
+    /* 画像がない場合は代替の薄背景 */
+    .feed-visual.placeholder{ background:#f3f4f6; aspect-ratio:16/9; }
   </style>
 </head>
 <body>
@@ -103,8 +126,7 @@
       if (typeof formatDate === 'function') return formatDate(iso);
       const d = new Date(iso||''); if (isNaN(d)) return '';
       const y=d.getFullYear(), m=('0'+(d.getMonth()+1)).slice(-2), dd=('0'+d.getDate()).slice(-2);
-      const hh=('0'+d.getHours()).slice(-2), mm=('0'+d.getMinutes()).slice(-2);
-      return `${y}/${m}/${dd} ${hh}:${mm}`;
+      return `${y}/${m}/${dd}`;
     }
     function resolveBgUrl(bg){
       if (!bg) return '';
@@ -146,7 +168,7 @@
       return Array.isArray(posts) ? posts : [];
     }
 
-    // ★ 新しい renderPosts
+    // ★ スクショ風の描画
     function renderPosts(posts){
       const q = (document.getElementById('kw')?.value || '').trim().toLowerCase();
       const host = document.getElementById('timeline');
@@ -163,32 +185,47 @@
       }
 
       filtered.forEach(p=>{
-        const card = document.createElement('article');
-        card.className = 'post-card';
-
-        const bgUrl = resolveBgUrl(p.bg || '');
-        const heroStyle = bgUrl ? ` style="background-image:url('${escapeHTML(bgUrl)}')"` : '';
         const author = (p.author || '匿名');
-        const avatarCh = (author.trim()[0] || '匿').toUpperCase();
+        const avatarCh = (author.trim()[0] || '匿');
         const when = fmtDate(p.createdAt || p.date);
+        const bgUrl = resolveBgUrl(p.bg || '');
+        const hasImg = !!bgUrl;
+
+        const card = document.createElement('article');
+        card.className = 'card feed-card';
 
         card.innerHTML = `
-          <div class="post-hero"${heroStyle}>
-            <div class="post-title">${escapeHTML(p.text || '')}</div>
+          <div class="feed-head">
+            <div class="feed-avatar" aria-hidden="true">${escapeHTML(avatarCh)}</div>
+            <div class="feed-username">${escapeHTML(author)}</div>
           </div>
 
-          <div class="post-meta">
-            <div class="meta-left">
-              <span class="avatar" aria-hidden="true">${escapeHTML(avatarCh)}</span>
-              <span class="post-author">by ${escapeHTML(author)}</span>
-              ${p.target ? `<span class="pill">対象:${escapeHTML(p.target)}</span>` : ''}
-              ${p.tag ? `<span class="pill">タグ:${escapeHTML(p.tag)}</span>` : ''}
-              ${p.scope ? `<span class="pill">公開:${escapeHTML(p.scope)}</span>` : ''}
-              <span>・${when}</span>
-            </div>
-            <div class="meta-right">
-              <a class="btn-link" href="detail.html?id=${encodeURIComponent(p.id)}">詳細</a>
-            </div>
+          ${hasImg
+            ? `<div class="feed-visual"><img src="${escapeHTML(bgUrl)}" alt=""></div>`
+            : `<div class="feed-visual placeholder"></div>`}
+
+          <h2 class="feed-title">${escapeHTML(p.text || '')}</h2>
+          <div class="feed-date">${when}</div>
+
+          <div class="feed-chips">
+            ${p.target ? `<span class="chip"><span class="ic">🙏</span><span>${escapeHTML(p.target)}</span></span>` : ''}
+            ${p.tag ? `<span class="chip"><span class="ic">🔖</span><span>${escapeHTML(p.tag)}</span></span>` : ''}
+          </div>
+
+          <div class="feed-actions">
+            <!-- いまはリアクションを保存していないので、レイアウトのみ（0表示） -->
+            <span class="rx"><span class="e">🙏</span><span class="c">0</span></span>
+            <span class="rx"><span class="e">😂</span><span class="c">0</span></span>
+            <span class="rx"><span class="e">🤝</span><span class="c">0</span></span>
+            <span class="rx"><span class="e">🌱</span><span class="c">0</span></span>
+            <span class="rx"><span class="e">WWW</span><span class="c">0</span></span>
+            <span class="rx"><span class="e">ほう</span><span class="c">0</span></span>
+            <span class="rx"><span class="e">え?</span><span class="c">0</span></span>
+            <span class="rx"><span class="e">ん?</span><span class="c">0</span></span>
+          </div>
+
+          <div class="feed-footer">
+            <a class="btn-link" href="detail.html?id=${encodeURIComponent(p.id)}">詳細</a>
           </div>
         `;
         host.appendChild(card);
