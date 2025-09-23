@@ -3,10 +3,28 @@ from flask import Flask, request, jsonify, send_from_directory, session
 from flask_cors import CORS
 from datetime import datetime, timezone, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
-import sqlite3, os, threading, secrets, unicodedata as _ud
+import sqlite3, os, threading, secrets, unicodedata as _ud, socket
 
+# ========= DB 保存先の決定（/data 優先） =========
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(APP_ROOT, "data.sqlite3")
+
+def _writable(p: str) -> bool:
+    try:
+        return os.path.isdir(p) and os.access(p, os.W_OK)
+    except Exception:
+        return False
+
+# 明示指定があれば最優先（例: RENDER の環境変数で設定）
+DB_PATH = os.environ.get("DB_PATH") or ""
+
+if not DB_PATH:
+    # /data がマウント済みならそこに保存（Render Starter の永続ディスク）
+    data_dir = "/data" if _writable("/data") else APP_ROOT
+    db_name = os.environ.get("DB_FILENAME", "zange.sqlite3" if data_dir == "/data" else "data.sqlite3")
+    DB_PATH = os.path.join(data_dir, db_name)
+
+# 念のためディレクトリ作成
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 
@@ -25,9 +43,15 @@ _lock = threading.Lock()
 
 # ===== DB接続 =====
 def _conn():
-    con = sqlite3.connect(DB_PATH, check_same_thread=False)
+    # shared cache を避け、busy を減らすための基本設定
+    con = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=15.0)
     con.row_factory = sqlite3.Row
+    # 重要: 外部キー & WAL
     con.execute("PRAGMA foreign_keys = ON;")
+    try:
+        con.execute("PRAGMA journal_mode = WAL;")
+    except sqlite3.OperationalError:
+        pass
     return con
 
 def _init_db():
@@ -68,7 +92,7 @@ def _init_db():
         con.commit()
 _init_db()
 
-# ===== 正規化ユーティリティ（① 揺れ吸収）=====
+# ===== 正規化ユーティリティ =====
 def _nfc(s: str) -> str:
     try:
         return _ud.normalize("NFC", s or "")
@@ -116,7 +140,7 @@ def api_signup():
     password_in = (data.get("password") or "")
     nickname = (data.get("nickname") or "").strip() or None
 
-    # ② サインアップ時：正規化して保存
+    # 正規化して保存
     email = _norm_email(email_in)
     password = _norm_pw(password_in)
 
@@ -150,7 +174,7 @@ def api_login():
     email_norm = _norm_email(email_in)
     pw_norm = _norm_pw(password_in)
 
-    # ③ ログイン時：正規化後 と 生入力 の両方で検索＋検証
+    # 正規化後 と 生入力 の両方で検索＋検証
     with _lock, _conn() as con:
         row = con.execute(
             "SELECT id,email,password_hash,nickname,createdAt FROM users WHERE email=?",
@@ -164,7 +188,6 @@ def api_login():
 
     ok = False
     if row:
-        # 生→ダメなら正規化後で照合
         if check_password_hash(row["password_hash"], password_in):
             ok = True
         elif pw_norm != password_in and check_password_hash(row["password_hash"], pw_norm):
@@ -265,7 +288,7 @@ def add_comment():
         row = dict(con.execute("SELECT * FROM comments WHERE id=?", (new_id,)).fetchone())
     return jsonify(row), 201
 
-# ===== ヘルスチェック / バージョン確認（⑤ 印）=====
+# ===== ヘルスチェック / バージョン確認 =====
 @app.get("/api/health")
 def health():
     return jsonify({"ok": True}), 200
@@ -273,16 +296,24 @@ def health():
 @app.get("/api/ping")
 def ping():
     # “新しいコードが動いている”ことを確認する印
-    return jsonify({"ok": True, "version": "login-fallback-v3"}), 200
+    return jsonify({"ok": True, "version": "disk-persist-v1"}), 200
 
-# ===== デバッグ系（⑥ 観測用&開発用ユーティリティ） =====
+# ===== デバッグ系：状態確認 =====
+@app.get("/api/diag")
+def api_diag():
+    hostname = socket.gethostname()
+    instance = os.environ.get("RENDER_INSTANCE_ID") or hostname
+    using_data = DB_PATH.startswith("/data")
+    return jsonify({
+        "ok": True,
+        "db_path": DB_PATH,
+        "db_exists": os.path.exists(DB_PATH),
+        "using_/data": using_data,
+        "instance": instance
+    }), 200
+
 @app.get("/api/auth-debug")
 def api_auth_debug():
-    """
-    開発確認用：メールの存在を確認するだけ。
-    例: /api/auth-debug?email=a@example.com
-    レスポンス: {"ok": true, "exists_raw": false, "exists_n": true, "sample":"auth-debug-v1"}
-    """
     email_raw = (request.args.get("email") or "").strip()
     email_n   = _norm_email(email_raw)
     with _lock, _conn() as con:
@@ -297,13 +328,6 @@ def api_auth_debug():
 
 @app.post("/api/dev-reset-password")
 def api_dev_reset_password():
-    """
-    開発専用：パスワードを強制更新（本番では使わない）。
-    使い方:
-      1) 環境変数 DEV_RESET_TOKEN を設定してデプロイ
-      2) POST /api/dev-reset-password?email=...&new=...&token=＜DEV_RESET_TOKEN＞
-         もしくは JSON で {email,new,token}
-    """
     token_expect = os.environ.get("DEV_RESET_TOKEN")
     if not token_expect:
         return jsonify({"ok": False, "error": "disabled"}), 403
@@ -327,7 +351,6 @@ def api_dev_reset_password():
         con.commit()
     return jsonify({"ok": True}), 200
 
-# ===== 低リスクな内部デバッグ（有効化時のみ）=====
 @app.post("/api/_debug_login")
 def _debug_login():
     if not os.environ.get("DEBUG_LOGIN"):
