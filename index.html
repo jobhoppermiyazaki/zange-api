@@ -52,14 +52,25 @@
       display:flex; flex-wrap:wrap; gap:18px 24px;
       padding:10px 16px 14px;
       border-top:1px solid #eee;
+      align-items: center;
     }
     .rx{
       display:inline-flex; align-items:center; gap:8px;
       font-weight:800; color:#111;
       min-width:52px;
+      cursor:pointer;
+      user-select:none;
     }
     .rx .e{ font-size:22px; line-height:1 }
     .rx .c{ font-size:16px; opacity:.9 }
+    .rx-add{
+      margin-left:auto;
+      display:inline-flex; align-items:center; gap:6px;
+      padding:8px 10px; border-radius:10px;
+      border:1px solid #e5e7eb; background:#fff; cursor:pointer;
+      font-weight:800;
+    }
+    .rx-add .plus{ font-size:18px; line-height:1 }
     /* 詳細リンク（右下に自然に収まるように） */
     .feed-footer{
       display:flex; justify-content:flex-end;
@@ -162,13 +173,57 @@
       });
     })();
 
-    /* ========== 投稿一覧（サーバーのみ） ========== */
+    /* ========== 投稿一覧 ========== */
     async function loadPosts(){
       const posts = await fetchJsonWithFallback(window.ZANGE_API_BASES, { method:'GET' });
       return Array.isArray(posts) ? posts : [];
     }
 
-    // ★ スクショ風の描画
+    // ——— ここから (A) 反映しやすい差分：描画＋クリック処理 ———
+
+    // バックエンドのキーと表示の対応
+    const REACTION_DEF = [
+      {key:'pray',      label:'🙏'},
+      {key:'laugh',     label:'😂'},
+      {key:'handshake', label:'🤝'},
+      {key:'seed',      label:'🌱'},
+      {key:'www',       label:'WWW'},
+      {key:'hou',       label:'ほう'},
+      {key:'eh',        label:'え?'},
+      {key:'n',         label:'ん?'}
+    ];
+
+    // 1件のカードに対し現在のリアクション集計を読み込み反映
+    async function hydrateReactions(postId, card){
+      try{
+        const r = await fetch(`/api/reactions?postId=${encodeURIComponent(postId)}`, {credentials:'include', cache:'no-store'});
+        const data = await r.json();
+        const counts = (data && data.ok && data.counts) ? data.counts : {};
+        card.querySelectorAll('[data-rkey]').forEach(el=>{
+          const k = el.getAttribute('data-rkey');
+          const cEl = el.querySelector('.c');
+          if (cEl) cEl.textContent = counts[k] ? String(counts[k]) : '0';
+        });
+      }catch(_e){}
+    }
+
+    // +1 して表示更新
+    async function bumpReaction(postId, rkey, counterEl){
+      try{
+        const r = await fetch('/api/reactions', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          credentials:'include',
+          body: JSON.stringify({postId, key:rkey})
+        });
+        const data = await r.json();
+        if (data && data.ok && typeof data.count === 'number'){
+          counterEl.textContent = String(data.count);
+        }
+      }catch(_e){}
+    }
+
+    // スクショ風描画：カードHTML＋反応クリック
     function renderPosts(posts){
       const q = (document.getElementById('kw')?.value || '').trim().toLowerCase();
       const host = document.getElementById('timeline');
@@ -193,6 +248,13 @@
 
         const card = document.createElement('article');
         card.className = 'card feed-card';
+        card.setAttribute('data-postid', String(p.id));
+
+        const rxHtml = REACTION_DEF.map(rx =>
+          `<span class="rx" role="button" tabindex="0" aria-label="${rx.label}を送る" data-rkey="${rx.key}">
+             <span class="e">${rx.label}</span><span class="c">0</span>
+           </span>`
+        ).join('');
 
         card.innerHTML = `
           <div class="feed-head">
@@ -213,15 +275,10 @@
           </div>
 
           <div class="feed-actions">
-            <!-- いまはリアクションを保存していないので、レイアウトのみ（0表示） -->
-            <span class="rx"><span class="e">🙏</span><span class="c">0</span></span>
-            <span class="rx"><span class="e">😂</span><span class="c">0</span></span>
-            <span class="rx"><span class="e">🤝</span><span class="c">0</span></span>
-            <span class="rx"><span class="e">🌱</span><span class="c">0</span></span>
-            <span class="rx"><span class="e">WWW</span><span class="c">0</span></span>
-            <span class="rx"><span class="e">ほう</span><span class="c">0</span></span>
-            <span class="rx"><span class="e">え?</span><span class="c">0</span></span>
-            <span class="rx"><span class="e">ん?</span><span class="c">0</span></span>
+            ${rxHtml}
+            <button class="rx-add" type="button" data-postid="${p.id}">
+              <span class="plus">＋</span><span>スタンプ</span>
+            </button>
           </div>
 
           <div class="feed-footer">
@@ -229,8 +286,45 @@
           </div>
         `;
         host.appendChild(card);
+
+        // 初期集計を反映
+        hydrateReactions(p.id, card);
       });
     }
+
+    // クリック/Enter で +1（イベント委譲）
+    document.addEventListener('click', (ev)=>{
+      const rx = ev.target.closest('.rx');
+      if (rx){
+        const card = rx.closest('[data-postid]');
+        const postId = card?.getAttribute('data-postid');
+        const rkey = rx.getAttribute('data-rkey');
+        const cEl  = rx.querySelector('.c');
+        if (postId && rkey && cEl){
+          bumpReaction(postId, rkey, cEl);
+        }
+        return;
+      }
+      const add = ev.target.closest('.rx-add');
+      if (add){
+        const pid = add.getAttribute('data-postid');
+        openStampPicker(pid);
+      }
+    });
+
+    document.addEventListener('keydown', (ev)=>{
+      if (ev.key !== 'Enter') return;
+      const rx = ev.target.closest('.rx');
+      if (rx){
+        const card = rx.closest('[data-postid]');
+        const postId = card?.getAttribute('data-postid');
+        const rkey = rx.getAttribute('data-rkey');
+        const cEl  = rx.querySelector('.c');
+        if (postId && rkey && cEl){
+          bumpReaction(postId, rkey, cEl);
+        }
+      }
+    });
 
     async function refresh(){
       try{
@@ -259,7 +353,68 @@
       }
     }
 
+    // ——— ここから (B) 追加スタンプ用モーダル ———
+    const EXTRA_REACTIONS = REACTION_DEF; // ひとまず全種類から選べる
+
+    function openStampPicker(postId){
+      const backdrop = document.getElementById('stampModal');
+      backdrop.style.display = 'block';
+      backdrop.dataset.postid = postId;
+
+      const grid = document.getElementById('stampGrid');
+      grid.innerHTML = '';
+      EXTRA_REACTIONS.forEach(rx=>{
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'stamp-item';
+        item.setAttribute('data-rkey', rx.key);
+        item.innerHTML = `<span style="font-size:28px;line-height:1">${rx.label}</span>`;
+        grid.appendChild(item);
+      });
+    }
+    function closeStampPicker(){
+      const backdrop = document.getElementById('stampModal');
+      backdrop.style.display = 'none';
+      backdrop.dataset.postid = '';
+    }
+
+    // モーダルのクリック処理
+    document.addEventListener('click', (e)=>{
+      // 閉じる
+      if (e.target.matches('#stampClose') || e.target.matches('#stampModal')){
+        closeStampPicker();
+        return;
+      }
+      // 選択
+      if (e.target.closest('.stamp-item')){
+        const btn = e.target.closest('.stamp-item');
+        const rkey = btn.getAttribute('data-rkey');
+        const backdrop = document.getElementById('stampModal');
+        const postId = backdrop.dataset.postid;
+        if (!postId || !rkey) return;
+
+        // 対象カードのカウンタ要素を探す（無ければ作らない＝描画定義が全キー持っているため）
+        const card = document.querySelector(`[data-postid="${CSS.escape(postId)}"]`);
+        const rxEl = card?.querySelector(`.rx[data-rkey="${CSS.escape(rkey)}"] .c`);
+        if (rxEl){
+          bumpReaction(postId, rkey, rxEl);
+        }
+        closeStampPicker();
+      }
+    });
+
     document.addEventListener('DOMContentLoaded', ()=>{ renderUserIcon(); refresh(); });
   </script>
+
+  <!-- (B) 追加スタンプ用の簡易ピッカー（モーダル） -->
+  <div id="stampModal" class="stamp-modal-backdrop" style="display:none" aria-hidden="true">
+    <div class="stamp-modal" role="dialog" aria-modal="true" aria-labelledby="stampTitle">
+      <h3 id="stampTitle">スタンプを選ぶ</h3>
+      <div id="stampGrid" class="stamp-grid"><!-- JSで挿入 --></div>
+      <div class="row-end">
+        <button id="stampClose" type="button" class="btn-close">閉じる</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
