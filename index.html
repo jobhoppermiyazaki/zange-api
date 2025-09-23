@@ -15,78 +15,30 @@
   <link rel="stylesheet" href="style.css">
   <meta name="color-scheme" content="light">
 
-  <!-- ★ タイムラインをスクショ風にする最小追加CSS（既存style.cssはそのまま） -->
+  <!-- タイムライン最小追加スタイル -->
   <style>
     .feed-card{ padding:0; overflow:hidden }
-    .feed-head{
-      display:flex; align-items:center; gap:12px;
-      padding:14px 16px;
-    }
-    .feed-avatar{
-      width:44px; height:44px; border-radius:50%;
-      background:#fdece9; color:#666; font-weight:900;
-      display:grid; place-items:center; flex:0 0 auto;
-      letter-spacing:.02em;
-    }
+    .feed-head{ display:flex; align-items:center; gap:12px; padding:14px 16px; }
+    .feed-avatar{ width:44px; height:44px; border-radius:50%; background:#fdece9; color:#666; font-weight:900; display:grid; place-items:center; flex:0 0 auto; letter-spacing:.02em; }
     .feed-username{ font-weight:800; font-size:16px }
-    .feed-visual img{
-      width:100%; height:auto; display:block;
-      border-radius:0;
-      background:#f3f4f6;
-    }
-    .feed-title{
-      margin:14px 16px 4px;
-      font-size: clamp(20px, 5.6vw, 28px);
-      line-height:1.35; font-weight:900;
-      letter-spacing:.2px;
-    }
+    .feed-visual img{ width:100%; height:auto; display:block; background:#f3f4f6; }
+    .feed-title{ margin:14px 16px 4px; font-size:clamp(20px,5.6vw,28px); line-height:1.35; font-weight:900; letter-spacing:.2px; }
     .feed-date{ color:#6b7280; font-size:13px; margin:0 16px 8px }
     .feed-chips{ display:flex; flex-wrap:wrap; gap:8px; margin:0 16px 14px }
-    .chip{
-      display:inline-flex; align-items:center; gap:6px;
-      padding:6px 10px; border-radius:999px;
-      background:#f3f4f6; color:#111; font-weight:700;
-    }
+    .chip{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; background:#f3f4f6; color:#111; font-weight:700; }
     .chip .ic{ font-size:16px; line-height:1 }
-    .feed-actions{
-      display:flex; flex-wrap:wrap; gap:18px 24px;
-      padding:10px 16px 14px;
-      border-top:1px solid #eee;
-      align-items: center;
-    }
-    .rx{
-      display:inline-flex; align-items:center; gap:8px;
-      font-weight:800; color:#111;
-      min-width:52px;
-      cursor:pointer;
-      user-select:none;
-    }
+    .feed-actions{ display:flex; flex-wrap:wrap; gap:18px 24px; padding:10px 16px 14px; border-top:1px solid #eee; align-items:center; }
+    .rx{ display:inline-flex; align-items:center; gap:8px; font-weight:800; color:#111; min-width:52px; cursor:pointer; user-select:none; }
     .rx .e{ font-size:22px; line-height:1 }
     .rx .c{ font-size:16px; opacity:.9 }
     .rx .rx-img{ width:22px; height:22px; object-fit:contain; display:none; }
-    .rx-add{
-      margin-left:auto;
-      display:inline-flex; align-items:center; gap:6px;
-      padding:8px 10px; border-radius:10px;
-      border:1px solid #e5e7eb; background:#fff; cursor:pointer;
-      font-weight:800;
-    }
+    .rx-add{ margin-left:auto; display:inline-flex; align-items:center; gap:6px; padding:8px 10px; border-radius:10px; border:1px solid #e5e7eb; background:#fff; cursor:pointer; font-weight:800; }
     .rx-add .plus{ font-size:18px; line-height:1 }
-    .feed-footer{
-      display:flex; justify-content:flex-end;
-      padding:0 16px 16px;
-    }
-    .btn-link{
-      text-decoration:none; font-weight:800; color:#2f6fb0;
-      padding:6px 10px; border-radius:8px;
-      background:#f7fbff; border:1px solid #e6f0ff;
-    }
+    .feed-footer{ display:flex; justify-content:flex-end; padding:0 16px 16px; }
+    .btn-link{ text-decoration:none; font-weight:800; color:#2f6fb0; padding:6px 10px; border-radius:8px; background:#f7fbff; border:1px solid #e6f0ff; }
     .feed-visual.placeholder{ background:#f3f4f6; aspect-ratio:16/9; }
-
-    /* ▼ スタンプ画像（ピッカー表示用） */
-    .stamp-item img{
-      width:44px; height:44px; object-fit:contain; display:block;
-    }
+    /* ピッカーのサムネ */
+    .stamp-item img{ width:44px; height:44px; object-fit:contain; display:block; }
   </style>
 </head>
 <body>
@@ -114,7 +66,7 @@
     <section id="timeline"></section>
   </main>
 
-  <!-- 状態表示（APIエラー時のみ表示） -->
+  <!-- 状態表示 -->
   <div id="apiStatus" style="position:sticky;bottom:90px;z-index:9;font:12px/1.4 system-ui;background:#fff3bf;border:1px solid #ffe066;padding:6px 8px;display:none;border-radius:8px;margin:8px"></div>
 
   <footer class="mobile-tabbar">
@@ -136,7 +88,7 @@
   <script src="script.js"></script>
   <script>
     /* ========== ユーティリティ ========== */
-    function escapeHTML(s){ return (s||"").replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m])); }
+    function escapeHTML(s){ return (s||"").replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;","&gt;":"&gt;",'"':"&quot;","'":"&#39;" }[m])); }
     function fmtDate(iso){
       if (typeof formatDate === 'function') return formatDate(iso);
       const d = new Date(iso||''); if (isNaN(d)) return '';
@@ -183,9 +135,7 @@
       return Array.isArray(posts) ? posts : [];
     }
 
-    // ——— ここから (A) 反映しやすい差分：描画＋クリック処理 ———
-
-    // バックエンドのキーと表示の対応
+    // 反応キーと表示
     const REACTION_DEF = [
       {key:'pray',      label:'🙏'},
       {key:'laugh',     label:'😂'},
@@ -196,21 +146,22 @@
       {key:'eh',        label:'え?'},
       {key:'n',         label:'ん?'}
     ];
+    const BUILTIN_KEYS = ['pray','laugh','handshake','seed']; // 初期表示はこれだけ
 
-    // 画像ファイル名との対応（方法②：/stamps 配下の PNG 等）
+    // スタンプ画像（方法②：/stamps 下のPNG等）
     function keyToBasename(key){
       switch(key){
         case 'www': return 'wwww';
         case 'hou': return 'ho';
         case 'eh' : return 'e';
         case 'n'  : return 'n';
-        default   : return null; // 画像なし（絵文字のまま）
+        default   : return null;
       }
     }
     const STAMP_BASE = '/stamps';
     function stampCandidatesByKey(key){
       const base = keyToBasename(key);
-      if(!base) return []; // 絵文字系
+      if(!base) return [];
       const b = encodeURIComponent(base);
       return [
         `${STAMP_BASE}/${b}.png`,
@@ -220,23 +171,63 @@
       ];
     }
 
-    // 1件のカードに対し現在のリアクション集計を読み込み反映
+    // 画像スキン
+    function skinReactionImages(container){
+      container.querySelectorAll('.rx[data-rkey]').forEach(rx=>{
+        const key = rx.getAttribute('data-rkey');
+        const cands = stampCandidatesByKey(key);
+        if (!cands.length) return;
+        let i=0;
+        const img = rx.querySelector('.rx-img') || (()=>{ const im=document.createElement('img'); im.className='rx-img'; rx.insertBefore(im, rx.firstChild); return im; })();
+        const txt = rx.querySelector('.e');
+        img.onload = ()=>{ img.style.display='inline-block'; if(txt) txt.style.display='none'; };
+        img.onerror = ()=>{ i++; if(i<cands.length){ img.src=cands[i]; } else { img.style.display='none'; if(txt) txt.style.display='inline'; } };
+        img.src = cands[0];
+      });
+    }
+
+    // 指定のカードに反応ボタンが無ければ作る
+    function ensureRxButton(card, key){
+      let rxEl = card.querySelector(`.rx[data-rkey="${CSS.escape(key)}"]`);
+      if (rxEl) return rxEl;
+      const def = REACTION_DEF.find(d=>d.key===key); if(!def) return null;
+      const span = document.createElement('span');
+      span.className = 'rx';
+      span.setAttribute('role','button'); span.tabIndex = 0;
+      span.setAttribute('data-rkey', key);
+      span.setAttribute('aria-label', `${def.label}を送る`);
+      span.innerHTML = `<img class="rx-img" alt=""><span class="e">${def.label}</span><span class="c">0</span>`;
+      const addBtn = card.querySelector('.rx-add');
+      if (addBtn) addBtn.parentNode.insertBefore(span, addBtn);
+      else card.querySelector('.feed-actions')?.appendChild(span);
+      skinReactionImages(span);
+      return span;
+    }
+
+    // 集計反映（必要ならボタンも後付け）
     async function hydrateReactions(postId, card){
       try{
         const r = await fetch(`/api/reactions?postId=${encodeURIComponent(postId)}`, {credentials:'include', cache:'no-store'});
         const data = await r.json();
         const counts = (data && data.ok && data.counts) ? data.counts : {};
+        // まず既存ボタンの数字更新
         card.querySelectorAll('[data-rkey]').forEach(el=>{
           const k = el.getAttribute('data-rkey');
           const cEl = el.querySelector('.c');
           if (cEl) cEl.textContent = counts[k] ? String(counts[k]) : '0';
         });
+        // 4つ以外で count>0 のものは行に追加
+        Object.entries(counts).forEach(([k,v])=>{
+          if (v>0 && !BUILTIN_KEYS.includes(k)){
+            const el = ensureRxButton(card, k);
+            if (el) { const c=el.querySelector('.c'); if(c) c.textContent=String(v); }
+          }
+        });
       }catch(_e){}
-      // 数字反映後にアイコンのスキンを適用
       skinReactionImages(card);
     }
 
-    // +1 して表示更新
+    // +1
     async function bumpReaction(postId, rkey, counterEl){
       try{
         const r = await fetch('/api/reactions', {
@@ -252,23 +243,7 @@
       }catch(_e){}
     }
 
-    // テキスト系スタンプを画像に差し替える（画像が取れた場合のみ）
-    function skinReactionImages(container){
-      container.querySelectorAll('.rx[data-rkey]').forEach(rx=>{
-        const key = rx.getAttribute('data-rkey');
-        const cands = stampCandidatesByKey(key);
-        if (!cands.length) return; // 絵文字のまま
-
-        let i = 0;
-        const img = rx.querySelector('.rx-img') || (()=>{ const im=document.createElement('img'); im.className='rx-img'; rx.insertBefore(im, rx.firstChild); return im; })();
-        const textEl = rx.querySelector('.e');
-        img.onload = ()=>{ img.style.display='inline-block'; if(textEl) textEl.style.display='none'; };
-        img.onerror = ()=>{ i++; if(i<cands.length){ img.src=cands[i]; } else { img.style.display='none'; if(textEl) textEl.style.display='inline'; } };
-        img.src = cands[0];
-      });
-    }
-
-    // スクショ風描画：カードHTML＋反応クリック
+    // 描画（初期は4つのみ）
     function renderPosts(posts){
       const q = (document.getElementById('kw')?.value || '').trim().toLowerCase();
       const host = document.getElementById('timeline');
@@ -295,12 +270,14 @@
         card.className = 'card feed-card';
         card.setAttribute('data-postid', String(p.id));
 
-        const rxHtml = REACTION_DEF.map(rx =>
-          `<span class="rx" role="button" tabindex="0" aria-label="${rx.label}を送る" data-rkey="${rx.key}">
-             <img class="rx-img" alt="" />
-             <span class="e">${rx.label}</span><span class="c">0</span>
-           </span>`
-        ).join('');
+        const rxHtml = REACTION_DEF
+          .filter(rx => BUILTIN_KEYS.includes(rx.key)) // ← 初期表示は4つだけ
+          .map(rx =>
+            `<span class="rx" role="button" tabindex="0" aria-label="${rx.label}を送る" data-rkey="${rx.key}">
+               <img class="rx-img" alt="">
+               <span class="e">${rx.label}</span><span class="c">0</span>
+             </span>`
+          ).join('');
 
         card.innerHTML = `
           <div class="feed-head">
@@ -333,13 +310,13 @@
         `;
         host.appendChild(card);
 
-        // 画像スキン適用 & 初期集計
+        // 初期スキン & 集計反映（必要なら追加）
         skinReactionImages(card);
         hydrateReactions(p.id, card);
       });
     }
 
-    // クリック/Enter で +1（イベント委譲）
+    // クリック/Enter
     document.addEventListener('click', (ev)=>{
       const rx = ev.target.closest('.rx');
       if (rx){
@@ -358,7 +335,6 @@
         openStampPicker(pid);
       }
     });
-
     document.addEventListener('keydown', (ev)=>{
       if (ev.key !== 'Enter') return;
       const rx = ev.target.closest('.rx');
@@ -400,8 +376,8 @@
       }
     }
 
-    // ——— ここから (B) 追加スタンプ用モーダル ———
-    const EXTRA_REACTIONS = REACTION_DEF; // ひとまず全種類から選べる
+    // ===== 追加スタンプモーダル =====
+    const EXTRA_REACTIONS = REACTION_DEF; // カタログ（選択肢は全種類）
 
     function openStampPicker(postId){
       const backdrop = document.getElementById('stampModal');
@@ -417,65 +393,48 @@
         item.className = 'stamp-item';
         item.setAttribute('data-rkey', rx.key);
 
-        // 画像（PNG優先）→webp/jpg/jpeg → 最後にテキスト
         const img = document.createElement('img');
         img.alt = rx.label;
         const cands = stampCandidatesByKey(rx.key);
         let i = 0;
         img.onerror = () => {
           i++;
-          if (i < cands.length) {
-            img.src = cands[i];
-          } else {
-            item.innerHTML = `<span style="font-size:28px;line-height:1">${rx.label}</span>`;
-          }
+          if (i < cands.length) img.src = cands[i];
+          else item.innerHTML = `<span style="font-size:28px;line-height:1">${rx.label}</span>`;
         };
         if (cands.length){
           img.src = cands[0];
           item.appendChild(img);
         }else{
-          // 絵文字のみ
           item.innerHTML = `<span style="font-size:28px;line-height:1">${rx.label}</span>`;
         }
         grid.appendChild(item);
       });
     }
-
     function closeStampPicker(){
       const backdrop = document.getElementById('stampModal');
       backdrop.style.display = 'none';
       backdrop.dataset.postid = '';
     }
 
-    // モーダルのクリック処理
+    // モーダル選択 → 行にボタンを作って+1
     document.addEventListener('click', (e)=>{
-      // 閉じる
-      if (e.target.matches('#stampClose') || e.target.matches('#stampModal')){
-        closeStampPicker();
-        return;
-      }
-      // 選択
-      if (e.target.closest('.stamp-item')){
-        const btn = e.target.closest('.stamp-item');
-        const rkey = btn.getAttribute('data-rkey');
-        const backdrop = document.getElementById('stampModal');
-        const postId = backdrop.dataset.postid;
-        if (!postId || !rkey) return;
+      if (e.target.matches('#stampClose') || e.target.matches('#stampModal')){ closeStampPicker(); return; }
+      const btn = e.target.closest('.stamp-item'); if (!btn) return;
+      const back = document.getElementById('stampModal'); if (back.style.display !== 'block') return;
+      const postId = back.dataset.postid; const rkey = btn.getAttribute('data-rkey'); if(!postId || !rkey) return;
 
-        // 対象カードのカウンタ要素を探す
-        const card = document.querySelector(`[data-postid="${CSS.escape(postId)}"]`);
-        const rxEl = card?.querySelector(`.rx[data-rkey="${CSS.escape(rkey)}"] .c`);
-        if (rxEl){
-          bumpReaction(postId, rkey, rxEl);
-        }
-        closeStampPicker();
-      }
+      const card = document.querySelector(`[data-postid="${CSS.escape(postId)}"]`);
+      const rx = ensureRxButton(card, rkey) || card.querySelector(`.rx[data-rkey="${CSS.escape(rkey)}"]`);
+      const counter = rx?.querySelector('.c');
+      if (counter){ bumpReaction(postId, rkey, counter); }
+      closeStampPicker();
     });
 
     document.addEventListener('DOMContentLoaded', ()=>{ renderUserIcon(); refresh(); });
   </script>
 
-  <!-- (B) 追加スタンプ用の簡易ピッカー（モーダル） -->
+  <!-- 追加スタンプ用モーダル -->
   <div id="stampModal" class="stamp-modal-backdrop" style="display:none" aria-hidden="true">
     <div class="stamp-modal" role="dialog" aria-modal="true" aria-labelledby="stampTitle">
       <h3 id="stampTitle">スタンプを選ぶ</h3>
