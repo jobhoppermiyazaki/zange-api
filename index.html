@@ -19,7 +19,13 @@
   <style>
     .feed-card{ padding:0; overflow:hidden }
     .feed-head{ display:flex; align-items:center; gap:12px; padding:14px 16px; }
-    .feed-avatar{ width:44px; height:44px; border-radius:50%; background:#fdece9; color:#666; font-weight:900; display:grid; place-items:center; flex:0 0 auto; letter-spacing:.02em; }
+    .feed-avatar{
+      width:44px; height:44px; border-radius:50%;
+      background:#fdece9; color:#666; font-weight:900;
+      display:grid; place-items:center; flex:0 0 auto; letter-spacing:.02em;
+      overflow:hidden;
+    }
+    .feed-avatar img{ width:100%; height:100%; object-fit:cover; display:block; border-radius:50%; }
     .feed-username{ font-weight:800; font-size:16px }
     .feed-visual img{ width:100%; height:auto; display:block; background:#f3f4f6; }
     .feed-title{ margin:14px 16px 4px; font-size:clamp(20px,5.6vw,28px); line-height:1.35; font-weight:900; letter-spacing:.2px; }
@@ -32,13 +38,10 @@
     .rx .e{ font-size:22px; line-height:1 }
     .rx .c{ font-size:16px; opacity:.9 }
     .rx .rx-img{ width:22px; height:22px; object-fit:contain; display:none; }
-    /* ＋ボタンはアイコンのみ */
     .rx-add{
-      margin-left:auto;
-      display:inline-flex; align-items:center; justify-content:center;
-      width:36px; height:36px; border-radius:10px;
-      border:1px solid #e5e7eb; background:#fff; cursor:pointer;
-      font-weight:800; line-height:1;
+      margin-left:auto; display:inline-flex; align-items:center; justify-content:center;
+      width:36px; height:36px; border-radius:10px; border:1px solid #e5e7eb; background:#fff;
+      cursor:pointer; font-weight:800; line-height:1;
     }
     .rx-add .plus{ font-size:20px; line-height:1 }
     .feed-footer{ display:flex; justify-content:flex-end; padding:0 16px 16px; }
@@ -155,6 +158,40 @@
     ];
     const BUILTIN_KEYS = ['pray','laugh','handshake','seed']; // 初期表示はこれだけ
 
+    // ===== アバター解決：settings.html で保存した画像を優先 =====
+    function resolveAuthorAvatar(author){
+      try{
+        // 1) 現在のプロフィール（settings.htmlの保存先）
+        if (typeof getProfile === 'function'){
+          const p = getProfile() || {};
+          if (author && (author === (p.nickname||''))) {
+            if (p.avatar && String(p.avatar).trim()) return p.avatar;
+          }
+        }
+        // 2) ログインユーザー（script.js 側の getAuthUser がある場合）
+        if (typeof getAuthUser === 'function'){
+          const me = getAuthUser();
+          if (me){
+            const myName = (me.profile?.nickname) || me.email || '';
+            if (author && author === myName){
+              const a = me.profile?.avatar;
+              if (a && String(a).trim()) return a;
+            }
+          }
+        }
+        // 3) ローカルのユーザー一覧（ニックネーム一致）
+        if (typeof getUsers === 'function'){
+          const users = getUsers() || [];
+          const hit = users.find(u => author && (author === (u.profile?.nickname || u.email)));
+          if (hit){
+            const a = hit.profile?.avatar;
+            if (a && String(a).trim()) return a;
+          }
+        }
+      }catch(_e){}
+      return null;
+    }
+
     // スタンプ画像（/stamps 下のPNG等）
     function keyToBasename(key){
       switch(key){
@@ -248,7 +285,7 @@
       }catch(_e){}
     }
 
-    // 描画（初期は4つのみ）
+    // 描画（初期は4つのみ、アバターは画像優先）
     function renderPosts(posts){
       const q = (document.getElementById('kw')?.value || '').trim().toLowerCase();
       const host = document.getElementById('timeline');
@@ -267,6 +304,7 @@
       filtered.forEach(p=>{
         const author = (p.author || '匿名');
         const avatarCh = (author.trim()[0] || '匿');
+        const avatarUrl = resolveAuthorAvatar(author);
         const when = fmtDate(p.createdAt || p.date);
         const bgUrl = resolveBgUrl(p.bg || '');
         const hasImg = !!bgUrl;
@@ -286,7 +324,11 @@
 
         card.innerHTML = `
           <div class="feed-head">
-            <div class="feed-avatar" aria-hidden="true">${escapeHTML(avatarCh)}</div>
+            ${
+              avatarUrl
+                ? `<div class="feed-avatar"><img src="${escapeHTML(avatarUrl)}" alt="${escapeHTML(author)}のアイコン"></div>`
+                : `<div class="feed-avatar" aria-hidden="true">${escapeHTML(avatarCh)}</div>`
+            }
             <div class="feed-username">${escapeHTML(author)}</div>
           </div>
 
@@ -399,28 +441,21 @@
 
         const img = document.createElement('img');
         img.alt = rx.label;
-        const cands = (function(){
-          const base = (()=>{
-            switch(rx.key){
-              case 'www': return 'wwww';
-              case 'hou': return 'ho';
-              case 'eh' : return 'e';
-              case 'n'  : return 'n';
-              default   : return null;
-            }
-          })();
-          if(!base) return [];
+        const baseMap = { www:'wwww', hou:'ho', eh:'e', n:'n' };
+        const base = baseMap[rx.key] || null;
+        let cand = [];
+        if (base){
           const b = encodeURIComponent(base);
-          return ['/stamps/'+b+'.png','/stamps/'+b+'.webp','/stamps/'+b+'.jpg','/stamps/'+b+'.jpeg'];
-        })();
+          cand = ['/stamps/'+b+'.png','/stamps/'+b+'.webp','/stamps/'+b+'.jpg','/stamps/'+b+'.jpeg'];
+        }
         let i = 0;
         img.onerror = () => {
           i++;
-          if (i < cands.length) img.src = cands[i];
+          if (i < cand.length) img.src = cand[i];
           else item.innerHTML = `<span style="font-size:28px;line-height:1">${rx.label}</span>`;
         };
-        if (cands.length){
-          img.src = cands[0];
+        if (cand.length){
+          img.src = cand[0];
           item.appendChild(img);
         }else{
           item.innerHTML = `<span style="font-size:28px;line-height:1">${rx.label}</span>`;
