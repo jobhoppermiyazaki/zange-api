@@ -32,8 +32,15 @@
     .rx .e{ font-size:22px; line-height:1 }
     .rx .c{ font-size:16px; opacity:.9 }
     .rx .rx-img{ width:22px; height:22px; object-fit:contain; display:none; }
-    .rx-add{ margin-left:auto; display:inline-flex; align-items:center; gap:6px; padding:8px 10px; border-radius:10px; border:1px solid #e5e7eb; background:#fff; cursor:pointer; font-weight:800; }
-    .rx-add .plus{ font-size:18px; line-height:1 }
+    /* ＋ボタンはアイコンのみ */
+    .rx-add{
+      margin-left:auto;
+      display:inline-flex; align-items:center; justify-content:center;
+      width:36px; height:36px; border-radius:10px;
+      border:1px solid #e5e7eb; background:#fff; cursor:pointer;
+      font-weight:800; line-height:1;
+    }
+    .rx-add .plus{ font-size:20px; line-height:1 }
     .feed-footer{ display:flex; justify-content:flex-end; padding:0 16px 16px; }
     .btn-link{ text-decoration:none; font-weight:800; color:#2f6fb0; padding:6px 10px; border-radius:8px; background:#f7fbff; border:1px solid #e6f0ff; }
     .feed-visual.placeholder{ background:#f3f4f6; aspect-ratio:16/9; }
@@ -88,7 +95,7 @@
   <script src="script.js"></script>
   <script>
     /* ========== ユーティリティ ========== */
-    function escapeHTML(s){ return (s||"").replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;","&gt;":"&gt;",'"':"&quot;","'":"&#39;" }[m])); }
+    function escapeHTML(s){ return (s||"").replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m])); }
     function fmtDate(iso){
       if (typeof formatDate === 'function') return formatDate(iso);
       const d = new Date(iso||''); if (isNaN(d)) return '';
@@ -148,7 +155,7 @@
     ];
     const BUILTIN_KEYS = ['pray','laugh','handshake','seed']; // 初期表示はこれだけ
 
-    // スタンプ画像（方法②：/stamps 下のPNG等）
+    // スタンプ画像（/stamps 下のPNG等）
     function keyToBasename(key){
       switch(key){
         case 'www': return 'wwww';
@@ -210,13 +217,11 @@
         const r = await fetch(`/api/reactions?postId=${encodeURIComponent(postId)}`, {credentials:'include', cache:'no-store'});
         const data = await r.json();
         const counts = (data && data.ok && data.counts) ? data.counts : {};
-        // まず既存ボタンの数字更新
         card.querySelectorAll('[data-rkey]').forEach(el=>{
           const k = el.getAttribute('data-rkey');
           const cEl = el.querySelector('.c');
           if (cEl) cEl.textContent = counts[k] ? String(counts[k]) : '0';
         });
-        // 4つ以外で count>0 のものは行に追加
         Object.entries(counts).forEach(([k,v])=>{
           if (v>0 && !BUILTIN_KEYS.includes(k)){
             const el = ensureRxButton(card, k);
@@ -271,7 +276,7 @@
         card.setAttribute('data-postid', String(p.id));
 
         const rxHtml = REACTION_DEF
-          .filter(rx => BUILTIN_KEYS.includes(rx.key)) // ← 初期表示は4つだけ
+          .filter(rx => BUILTIN_KEYS.includes(rx.key))
           .map(rx =>
             `<span class="rx" role="button" tabindex="0" aria-label="${rx.label}を送る" data-rkey="${rx.key}">
                <img class="rx-img" alt="">
@@ -299,18 +304,17 @@
 
           <div class="feed-actions">
             ${rxHtml}
-            <button class="rx-add" type="button" data-postid="${p.id}">
-              <span class="plus">＋</span><span>スタンプ</span>
+            <button class="rx-add" type="button" data-postid="${p.id}" aria-label="スタンプを選ぶ" title="スタンプを選ぶ">
+              <span class="plus">＋</span>
             </button>
           </div>
 
           <div class="feed-footer">
-            <a class="btn-link" href="detail.html?id=${encodeURIComponent(p.id)}">詳細</a>
+            <a class="btn-link" href="detail.html?id=${encodeURIComponent(p.id)}">コメント</a>
           </div>
         `;
         host.appendChild(card);
 
-        // 初期スキン & 集計反映（必要なら追加）
         skinReactionImages(card);
         hydrateReactions(p.id, card);
       });
@@ -377,7 +381,7 @@
     }
 
     // ===== 追加スタンプモーダル =====
-    const EXTRA_REACTIONS = REACTION_DEF; // カタログ（選択肢は全種類）
+    const EXTRA_REACTIONS = REACTION_DEF; // カタログ
 
     function openStampPicker(postId){
       const backdrop = document.getElementById('stampModal');
@@ -395,7 +399,20 @@
 
         const img = document.createElement('img');
         img.alt = rx.label;
-        const cands = stampCandidatesByKey(rx.key);
+        const cands = (function(){
+          const base = (()=>{
+            switch(rx.key){
+              case 'www': return 'wwww';
+              case 'hou': return 'ho';
+              case 'eh' : return 'e';
+              case 'n'  : return 'n';
+              default   : return null;
+            }
+          })();
+          if(!base) return [];
+          const b = encodeURIComponent(base);
+          return ['/stamps/'+b+'.png','/stamps/'+b+'.webp','/stamps/'+b+'.jpg','/stamps/'+b+'.jpeg'];
+        })();
         let i = 0;
         img.onerror = () => {
           i++;
