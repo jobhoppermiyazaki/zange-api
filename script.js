@@ -689,9 +689,37 @@ document.addEventListener("DOMContentLoaded", updateNotifBadge);
   const style = document.createElement("style");
   style.id = "headerAvatarCss";
   style.textContent = `
-    .header-avatar-only{ padding:0!important;background:transparent!important;border:none!important;box-shadow:none!important; }
-    .header-avatar-only{ display:inline-flex;align-items:center;justify-content:center;min-width:36px;min-height:36px; }
-    .header-avatar-only img{ display:block;width:36px;height:36px;border-radius:50%;object-fit:cover; }
+    .header-avatar-only {
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+}
+
+.header-avatar-only img.header-avatar-img {
+  display: block;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.header-avatar-only .header-avatar-fallback {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #ccc;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
   `;
   document.head.appendChild(style);
 })();
