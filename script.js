@@ -27,7 +27,16 @@ function getUsers(){ return JSON.parse(localStorage.getItem("users")||"[]"); }
 function saveUsers(list){ localStorage.setItem("users", JSON.stringify(list||[])); }
 function getAuthId(){ return localStorage.getItem("authUserId")||""; }
 function setAuthId(id){ id?localStorage.setItem("authUserId",id):localStorage.removeItem("authUserId"); }
-function getAuthUser(){ const id=getAuthId(); return getUsers().find(u=>u.id===id)||null; }
+// 置き換え
+function getAuthUser(){
+  const id = getAuthId();
+  const users = getUsers();
+  let u = users.find(x => x.id === id) || null;
+  if (u) return u;
+
+  // ★サーバーログイン時のフォールバック
+  return ensureLocalAuthFromActiveOwner();
+}
 function uid(){ return "u_"+Math.random().toString(36).slice(2,10); }
 
 /* ------------ Public API (signup/login) ------------ */
@@ -1310,6 +1319,8 @@ async function loginUser(email, pass) {
         bio: ""
       });
     }
+    // サーバー版 loginUser 内の return true の直前あたりに1行追加
+ensureLocalAuthFromActiveOwner();
     return true;
   }
   return false;
@@ -1343,4 +1354,38 @@ function setActiveProfileOwner(email){
 }
 function getActiveProfileOwner(){
   return (localStorage.getItem("profile_owner") || "").trim().toLowerCase();
+}
+// ★追加：サーバーのアクティブオーナー(email)からローカル users/auth を同期
+function ensureLocalAuthFromActiveOwner(){
+  const email = (typeof getActiveProfileOwner === "function" ? getActiveProfileOwner() : "") || "";
+  if (!email) return null;
+
+  const users = getUsers();
+  let u = users.find(x => x.email === email);
+
+  // なければローカルに“殻ユーザー”を作る（プロフィールは local のものを利用）
+  if (!u) {
+    const p = (typeof getProfile === "function" ? getProfile() : {}) || {};
+    u = {
+      id: uid(),
+      email,
+      pass: "",
+      profile: {
+        nickname: p.nickname || email || "匿名",
+        avatar:   p.avatar   || "images/default-avatar.png",
+        gender:   p.gender   || "",
+        age:      p.age      || "",
+        bio:      p.bio      || ""
+      },
+      following: [],
+      followers: []
+    };
+    users.push(u);
+    saveUsers(users);
+  }
+
+  // authUserId が未設定なら紐づける
+  if (!getAuthId()) setAuthId(u.id);
+
+  return u;
 }
