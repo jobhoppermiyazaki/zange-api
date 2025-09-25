@@ -766,10 +766,38 @@ async function _getHeaderAvatarInfo(){
   return { loggedIn:false };
 }
 
+// ▼ 1) about.html でも確実にヘッダー用コンテナを取得/用意する
+function _ensureHeaderIconBox(){
+  // まず既定
+  let box = document.getElementById('currentUserIcon');
+  if (box) return box;
+
+  // 既存の「ユーザー名チップ」などをコンテナ化（about.html で想定）
+  const candidate = document.querySelector(
+    '.header-user, .nav-user, .user-chip, #headerUser, .header-actions .user, .navbar .user'
+  );
+  if (candidate){
+    candidate.innerHTML = '<div id="currentUserIcon"></div>';
+    return candidate.firstElementChild;
+  }
+
+  // ヘッダーの右側っぽい領域を見つけて最後に挿入
+  const header = document.querySelector(
+    'header .header-actions, header .container, header, .topbar, .appbar'
+  );
+  if (header){
+    const div = document.createElement('div');
+    div.id = 'currentUserIcon';
+    header.appendChild(div);
+    return div;
+  }
+  return null;
+}
+
 /* 5) 描画（必要なときだけ再利用） */
 let _headerRenderedHTML = "";   // 不要な再描画を避ける簡易キャッシュ
 async function renderHeaderAvatarOnly(){
-  const box = _resolveHeaderBox();
+  const box = _ensureHeaderIconBox();   // ← ここを差し替え
   if (!box) return false;
 
   const info = await _getHeaderAvatarInfo();
