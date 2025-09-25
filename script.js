@@ -746,22 +746,34 @@ async function renderHeaderAvatarOnly(){
 
   const info = await _getHeaderAvatarInfo();
 
-  // 次に描こうとしている HTML を先に作って、同じならスキップ
+  // 次に描く HTML を作成（丸アイコン専用）
   let nextHTML = "";
   if (info.loggedIn){
-    nextHTML = `<img alt="${(info.title||"ユーザー").replace(/"/g,"&quot;")}" title="${(info.title||"").replace(/"/g,"&quot;")}" src="${info.avatar||"images/default-avatar.png"}">`;
+    nextHTML = `
+      <img
+        src="${info.avatar || "images/default-avatar.png"}"
+        alt="${(info.title||"ユーザー").replace(/"/g,"&quot;")}"
+        title="${(info.title||"").replace(/"/g,"&quot;")}"
+        class="header-avatar-img"
+      >
+    `;
   }else{
-    nextHTML = `<div style="width:36px;height:36px;border-radius:50%;background:#ccc;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;">未</div>`;
+    nextHTML = `
+      <div class="header-avatar-fallback">未</div>
+    `;
   }
 
-  if (_headerRenderedHTML === nextHTML) return true; // 変化なければ何もしない
+  // 変化なければ描画スキップ
+  if (_headerRenderedHTML === nextHTML) return true;
 
   box.classList.add("header-avatar-only");
   box.innerHTML = nextHTML;
 
-  // フォールバック
+  // フォールバック処理
   const img = box.querySelector("img");
-  if (img){ img.onerror = () => { img.onerror = null; img.src = "images/default-avatar.png"; }; }
+  if (img){
+    img.onerror = ()=>{ img.src="images/default-avatar.png"; };
+  }
 
   // クリック動作（既存仕様を踏襲）
   box.style.cursor = "pointer";
@@ -771,17 +783,16 @@ async function renderHeaderAvatarOnly(){
       if (confirm("ログアウトしますか？")){
         if (typeof logoutUser==="function") await logoutUser();
         alert("ログアウトしました");
-        location.href = "login.html";
+        location.href="login.html";
       }
     }else{
-      if (confirm("ログインしますか？")) location.href = "login.html";
+      if (confirm("ログインしますか？")) location.href="login.html";
     }
   };
 
   _headerRenderedHTML = nextHTML;
   return true;
 }
-
 /* 6) 要素待ち（最大 10 回 / 1 秒）— 重い全 DOM 監視はしない */
 function waitAndRenderHeader(){
   let tries = 0;
