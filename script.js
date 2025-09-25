@@ -682,26 +682,79 @@ document.addEventListener("DOMContentLoaded", updateNotifBadge);
 })();
 
 /* ================== Header current user icon ================== */
-;(function showCurrentUser(){
-  const box=document.getElementById("currentUserIcon"); if(!box) return;
-  const me=getAuthUser(); box.innerHTML=""; const size=48;
-  if(me){
-    const img=document.createElement("img");
-    img.src=me.profile?.avatar || "images/default-avatar.png";
-    img.alt=me.profile?.nickname || "ユーザー";
-    Object.assign(img.style,{width:size+"px",height:size+"px",borderRadius:"50%",objectFit:"cover"}); box.appendChild(img);
-  }else{
-    const circle=document.createElement("div");
-    Object.assign(circle.style,{width:size+"px",height:size+"px",borderRadius:"50%",background:"#ccc",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",color:"#fff"});
-    circle.textContent="未"; box.appendChild(circle);
+(function showCurrentUser(){
+  // 優先順で探す（どれか1つあればOK）
+  const box =
+    document.getElementById("currentUserIcon") ||
+    document.getElementById("headerUserChip") ||
+    document.querySelector(".header-user");
+  if(!box) return;
+
+  const me = getAuthUser();
+  const size = 36; // ヘッダー用に少し小さめ。必要なら 40～48 に調整可
+  box.innerHTML = "";
+
+  if (me) {
+    // 丸いアバター画像（投稿カードと同様の見た目）
+    const img = document.createElement("img");
+    img.src = me.profile?.avatar || "images/default-avatar.png";
+    img.alt = me.profile?.nickname || "ユーザー";
+    img.title = me.profile?.nickname || ""; // ホバーで名前が分かる
+    Object.assign(img.style, {
+      width: size + "px",
+      height: size + "px",
+      borderRadius: "50%",
+      objectFit: "cover",
+      display: "block"
+    });
+    box.appendChild(img);
+    // pill 内のテキスト等があるレイアウトでも違和感が出ないように
+    box.style.padding = "0";
+    box.style.background = "transparent";
+    box.style.border = "none";
+  } else {
+    // 未ログイン時はグレー丸
+    const circle = document.createElement("div");
+    Object.assign(circle.style, {
+      width: size + "px",
+      height: size + "px",
+      borderRadius: "50%",
+      background: "#ccc",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: "12px",
+      color: "#fff"
+    });
+    circle.textContent = "未";
+    box.appendChild(circle);
+    box.style.padding = "0";
+    box.style.background = "transparent";
+    box.style.border = "none";
   }
+
+  // クリック用カーソル
+  box.style.cursor = "pointer";
 })();
+
 (function initAuthIconMenu(){
-  const box=document.getElementById('currentUserIcon'); if(!box) return; box.style.cursor='pointer';
-  box.addEventListener('click',()=>{
-    const me=getAuthUser();
-    if(me){ if(confirm('ログアウトしますか？')){ logoutUser(); alert('ログアウトしました'); location.href='login.html'; } }
-    else{ if(confirm('ログインしますか？')) location.href='login.html'; }
+  const box =
+    document.getElementById("currentUserIcon") ||
+    document.getElementById("headerUserChip") ||
+    document.querySelector(".header-user");
+  if(!box) return;
+
+  box.addEventListener("click", async ()=>{
+    const me = getAuthUser();
+    if (me) {
+      if (confirm("ログアウトしますか？")) {
+        await logoutUser();
+        alert("ログアウトしました");
+        location.href = "login.html";
+      }
+    } else {
+      if (confirm("ログインしますか？")) location.href = "login.html";
+    }
   });
 })();
 
