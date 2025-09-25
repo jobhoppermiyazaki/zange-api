@@ -706,15 +706,22 @@ document.addEventListener("DOMContentLoaded", updateNotifBadge);
 })();
 
 /* ================== settings.html ================== */
-function initProfileUI(){
+async function initProfileUI(){
   const view=document.getElementById("profileView");
   const edit=document.getElementById("profileEdit");
   if(!view || !edit) return;
 
-// ★ ここを追加：現在ログインのユーザーにプロファイルの所有者を同期
-  const me = await fetchMe().catch(()=>null);
-  if (me && me.email) setActiveProfileOwner(me.email);
-  
+  // ★ 追加：サーバーセッションがあれば、そのユーザーのメールを
+  //   アクティブなプロフィール所有者として同期（無ければ何もしない）
+  if (typeof fetchMe === "function") {
+    try {
+      const me = await fetchMe();
+      if (me && me.email) setActiveProfileOwner(me.email);
+    } catch (e) {
+      // fetchMe が失敗してもローカル保存のプロフィールで続行
+    }
+  }
+
   function renderProfileView(p){
     const a=document.getElementById("profileAvatarShow"),
           n=document.getElementById("profileNameShow"),
@@ -727,6 +734,7 @@ function initProfileUI(){
     if(ag) ag.textContent=`年齢: ${p.age||"—"}`;
     if(b) b.textContent=`自己紹介: ${p.bio||"—"}`;
   }
+
   function renderProfileEdit(p){
     const nick=document.getElementById("profileNickname"),
           gen=document.getElementById("profileGender"),
@@ -739,9 +747,16 @@ function initProfileUI(){
     if(bio) bio.value=p.bio||"";
     if(prev) prev.src=p.avatar||"images/default-avatar.png";
   }
-  const p=getProfile(); renderProfileView(p); renderProfileEdit(p);
 
-  document.getElementById("editProfileBtn")?.addEventListener("click",()=>{ view.style.display="none"; edit.style.display="block"; });
+  // ここで改めて現在のプロフィールを取得して描画
+  const p=getProfile();
+  renderProfileView(p);
+  renderProfileEdit(p);
+
+  document.getElementById("editProfileBtn")?.addEventListener("click",()=>{
+    view.style.display="none"; edit.style.display="block";
+  });
+
   document.getElementById("profileSaveBtn")?.addEventListener("click",()=>{
     const payload={
       nickname:document.getElementById("profileNickname")?.value?.trim()||"",
@@ -751,17 +766,29 @@ function initProfileUI(){
       avatar:document.getElementById("profileAvatarPreview")?.src||"images/default-avatar.png"
     };
     saveProfile(payload);
+
+    // ローカルユーザー一覧（旧仕様）側も同期
     const me=getAuthUser();
     if(me){
       const users=getUsers(); const i=users.findIndex(u=>u.id===me.id);
       if(i>=0){ users[i].profile={...(users[i].profile||{}), ...payload}; saveUsers(users); }
     }
-    renderProfileView(payload); view.style.display="block"; edit.style.display="none"; alert("プロフィールを保存しました");
+
+    renderProfileView(payload);
+    view.style.display="block"; edit.style.display="none";
+    alert("プロフィールを保存しました");
   });
-  document.getElementById("profileCancelBtn")?.addEventListener("click",()=>{ renderProfileEdit(getProfile()); view.style.display="block"; edit.style.display="none"; });
+
+  document.getElementById("profileCancelBtn")?.addEventListener("click",()=>{
+    renderProfileEdit(getProfile());
+    view.style.display="block"; edit.style.display="none";
+  });
+
   document.getElementById("profileAvatarInput")?.addEventListener("change",(e)=>{
     const f=e.target.files?.[0]; if(!f) return;
-    const r=new FileReader(); r.onload=()=>{ const prev=document.getElementById("profileAvatarPreview"); if(prev) prev.src=r.result; }; r.readAsDataURL(f);
+    const r=new FileReader();
+    r.onload=()=>{ const prev=document.getElementById("profileAvatarPreview"); if(prev) prev.src=r.result; };
+    r.readAsDataURL(f);
   });
 }
 function renderMyPosts(){
