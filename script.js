@@ -27,7 +27,16 @@ function getUsers(){ return JSON.parse(localStorage.getItem("users")||"[]"); }
 function saveUsers(list){ localStorage.setItem("users", JSON.stringify(list||[])); }
 function getAuthId(){ return localStorage.getItem("authUserId")||""; }
 function setAuthId(id){ id?localStorage.setItem("authUserId",id):localStorage.removeItem("authUserId"); }
-function getAuthUser(){ const id=getAuthId(); return getUsers().find(u=>u.id===id)||null; }
+// 置き換え
+function getAuthUser(){
+  const id = getAuthId();
+  const users = getUsers();
+  let u = users.find(x => x.id === id) || null;
+  if (u) return u;
+
+  // ★サーバーログイン時のフォールバック
+  return ensureLocalAuthFromActiveOwner();
+}
 function uid(){ return "u_"+Math.random().toString(36).slice(2,10); }
 
 /* ------------ Public API (signup/login) ------------ */
@@ -77,45 +86,77 @@ function isMyPost(z){
   if(me && z.ownerId && String(z.ownerId)===String(me.id)) return true;
   return z.owner==="me"; // 旧データ互換
 }
+// 置き換え版：index のカードに「フォロー/フォロー中」ボタンを常に試みて表示
 function buildOwnerInfoByZange(z){
-  let avatar="images/default-avatar.png", nickname="匿名";
-  const ownerId=z.ownerId||null;
-  if(ownerId){
-    const u=getUsers().find(u=>u.id===ownerId);
-    if(u){ avatar=u.profile?.avatar||avatar; nickname=u.profile?.nickname||nickname; }
-  }else if(z.ownerProfile){
-    avatar=z.ownerProfile.avatar||avatar;
-    nickname=z.ownerProfile.nickname||nickname;
+  let avatar = "images/default-avatar.png", nickname = "匿名";
+  let resolvedOwnerId = z.ownerId || null;
+
+  // 既存の所有者情報を復元
+  if (z.ownerId) {
+    const u = getUsers().find(u => u.id === z.ownerId);
+    if (u) {
+      avatar   = u.profile?.avatar   || avatar;
+      nickname = u.profile?.nickname || nickname;
+    }
+  } else if (z.ownerProfile) {
+    avatar   = z.ownerProfile.avatar   || avatar;
+    nickname = z.ownerProfile.nickname || nickname;
   }
-  const wrap=document.createElement("div");
-  Object.assign(wrap.style,{display:"flex",alignItems:"center",gap:"10px",marginBottom:"6px"});
-  const img=document.createElement("img");
-  Object.assign(img,{src:avatar,alt:"avatar"});
-  Object.assign(img.style,{width:"40px",height:"40px",borderRadius:"50%",objectFit:"cover"});
+
+  // ownerId が無い古い投稿でも、ニックネームが一意ならユーザーを推定
+  if (!resolvedOwnerId && nickname && nickname !== "匿名") {
+    const candidates = getUsers().filter(u => (u.profile?.nickname || "") === nickname);
+    if (candidates.length === 1) {
+      resolvedOwnerId = candidates[0].id;
+      // 投稿データには書き戻さない（既存仕様維持＆安全のため）
+    }
+  }
+
+  // 表示ノード
+  const wrap = document.createElement("div");
+  Object.assign(wrap.style, { display:"flex", alignItems:"center", gap:"10px", marginBottom:"6px" });
+
+  const img = document.createElement("img");
+  Object.assign(img, { src: avatar, alt: "avatar" });
+  Object.assign(img.style, { width:"40px", height:"40px", borderRadius:"50%", objectFit:"cover" });
   wrap.appendChild(img);
-  const name=document.createElement("span");
-  name.textContent=nickname; Object.assign(name.style,{fontWeight:"600",fontSize:"15px"});
+
+  const name = document.createElement("span");
+  name.textContent = nickname;
+  Object.assign(name.style, { fontWeight:"600", fontSize:"15px" });
   wrap.appendChild(name);
 
-  const me=getAuthUser();
-  if(ownerId && me && me.id!==ownerId){
-    const isFollowing=(me.following||[]).includes(ownerId);
-    const btn=document.createElement("button");
-    btn.className="btn"; btn.dataset.followUser=ownerId; btn.style.marginLeft="auto";
-    btn.textContent=isFollowing?"フォロー中":"フォローする";
-    btn.addEventListener("click",()=>{
-      const nowMe=getAuthUser(); if(!nowMe){ alert("ログインが必要です"); return; }
-      ((nowMe.following||[]).includes(ownerId))?unfollowUser(ownerId):followUser(ownerId);
-      const latest=(getAuthUser()?.following||[]).includes(ownerId);
-      document.querySelectorAll(`button[data-follow-user="${ownerId}"]`)
-        .forEach(b=>{ b.textContent=latest?"フォロー中":"フォローする"; b.disabled=false; });
-      renderFollowBoxesSafe();
+  // フォローボタン（自分以外 & 所有者が特定できた時だけ）
+  const me = getAuthUser();
+  if (resolvedOwnerId && me && me.id !== resolvedOwnerId) {
+    const isFollowing = (me.following || []).includes(resolvedOwnerId);
+    const btn = document.createElement("button");
+    btn.className = "btn";
+    btn.dataset.followUser = resolvedOwnerId;
+    btn.style.marginLeft = "auto";
+    btn.textContent = isFollowing ? "フォロー中" : "フォローする";
+
+    btn.addEventListener("click", () => {
+      const nowMe = getAuthUser();
+      if (!nowMe) { alert("ログインが必要です"); return; }
+      ((nowMe.following || []).includes(resolvedOwnerId))
+        ? unfollowUser(resolvedOwnerId)
+        : followUser(resolvedOwnerId);
+
+      const latest = (getAuthUser()?.following || []).includes(resolvedOwnerId);
+      // 同一ユーザーの全ボタンを更新
+      document.querySelectorAll(`button[data-follow-user="${resolvedOwnerId}"]`)
+        .forEach(b => { b.textContent = latest ? "フォロー中" : "フォローする"; b.disabled = false; });
+
+      // 既存仕様のままフォロー欄も更新
+      if (typeof renderFollowBoxesSafe === "function") renderFollowBoxesSafe();
     });
+
     wrap.appendChild(btn);
   }
+
   return wrap;
 }
-
 /* ------------ Seed sample ------------ */
 ;(function seedIfEmpty(){
   const z=getZanges();
@@ -766,39 +807,51 @@ async function _getHeaderAvatarInfo(){
   return { loggedIn:false };
 }
 
-// ▼ 置き換え：ヘッダー用アイコンコンテナの解決（about.html対応）
+// ▼ これに置き換え
 function _ensureHeaderIconBox(){
-  // 既定
+  // 既存があればそのまま使う
   let box = document.getElementById('currentUserIcon');
   if (box) return box;
 
-  // 既存のユーザー表示チップを検出（about.html は #headerUserChip）
-  const candidate = document.querySelector(
-    '#headerUserChip, .header-user, .nav-user, .user-chip, #headerUser, .header-actions .user, .navbar .user'
-  );
-  if (candidate){
-    const div = document.createElement('div');
-    div.id = 'currentUserIcon';
-
-    // a / button の内側に入れるとスタイルが崩れることがあるので、要素ごと安全に置換
-    if (candidate.parentNode) {
-      candidate.parentNode.replaceChild(div, candidate);
-    } else {
-      candidate.innerHTML = '';
-      candidate.appendChild(div);
+  // about.html は #headerUserChip の“中に”専用コンテナを足す（消さない）
+  const isAbout = location.pathname.endsWith('about.html');
+  if (isAbout) {
+    const chip = document.querySelector('#headerUserChip');
+    if (chip) {
+      box = chip.querySelector('#currentUserIcon');
+      if (!box) {
+        box = document.createElement('span');
+        box.id = 'currentUserIcon';
+        box.className = 'header-avatar-only';
+        chip.appendChild(box);               // ← innerHTML を消さない
+      }
+      return box;
     }
-    return div;
   }
 
-  // ヘッダー領域に新規挿入（最終フォールバック）
-  const header = document.querySelector(
-    'header .header-actions, header .container, header, .topbar, .appbar'
+  // その他ページ：既存のユーザー表示領域があれば、その“中に”追加（消さない）
+  const holder = document.querySelector(
+    '#headerUserChip, .header-user, .nav-user, .user-chip, #headerUser, .header-actions .user, .navbar .user'
   );
+  if (holder) {
+    box = holder.querySelector('#currentUserIcon');
+    if (!box) {
+      box = document.createElement('span');
+      box.id = 'currentUserIcon';
+      box.className = 'header-avatar-only';
+      holder.appendChild(box);               // ← 置換せず追加
+    }
+    return box;
+  }
+
+  // 最終フォールバック：ヘッダー末尾に追加
+  const header = document.querySelector('header .header-actions, header .container, header, .topbar, .appbar');
   if (header){
-    const div = document.createElement('div');
-    div.id = 'currentUserIcon';
-    header.appendChild(div);
-    return div;
+    box = document.createElement('span');
+    box.id = 'currentUserIcon';
+    box.className = 'header-avatar-only';
+    header.appendChild(box);
+    return box;
   }
   return null;
 }
@@ -1124,14 +1177,14 @@ function renderFollowBoxesSafe(){
   tabFing.addEventListener('click',()=>activate('following'));
   activate('following');
 })();
-ensureHeaderIconBox, renderFollowBoxesSafe);
+document.addEventListener('DOMContentLoaded', renderFollowBoxesSafe);
 
 /* settings init */
-ensureHeaderIconBox, ()=>{
+document.addEventListener('DOMContentLoaded', ()=>{
   initProfileUI();
   renderMyPosts();
   document.getElementById('myPostsSearch')?.addEventListener('input', renderMyPosts);
-  if(typeof renderFollowBoxesSafe==='function') renderFollowBoxesSafe();
+  if (typeof renderFollowBoxesSafe === 'function') renderFollowBoxesSafe();
 });
 
 /* ================== User page (user.html) ================== */
@@ -1209,7 +1262,7 @@ ensureHeaderIconBox, ()=>{
 })();
 
 /* ================== Final sweep on DOMContentLoaded ================== */
-ensureHeaderIconBox, ()=>{
+document.addEventListener('DOMContentLoaded', ()=>{
   // 既に描画済みのカードにも保険でスキン＆＋を適用
   document.querySelectorAll('.card').forEach(card=>{
     const link=card.querySelector('a[href^="detail.html?id="]');
@@ -1266,6 +1319,8 @@ async function loginUser(email, pass) {
         bio: ""
       });
     }
+    // サーバー版 loginUser 内の return true の直前あたりに1行追加
+ensureLocalAuthFromActiveOwner();
     return true;
   }
   return false;
@@ -1299,4 +1354,38 @@ function setActiveProfileOwner(email){
 }
 function getActiveProfileOwner(){
   return (localStorage.getItem("profile_owner") || "").trim().toLowerCase();
+}
+// ★追加：サーバーのアクティブオーナー(email)からローカル users/auth を同期
+function ensureLocalAuthFromActiveOwner(){
+  const email = (typeof getActiveProfileOwner === "function" ? getActiveProfileOwner() : "") || "";
+  if (!email) return null;
+
+  const users = getUsers();
+  let u = users.find(x => x.email === email);
+
+  // なければローカルに“殻ユーザー”を作る（プロフィールは local のものを利用）
+  if (!u) {
+    const p = (typeof getProfile === "function" ? getProfile() : {}) || {};
+    u = {
+      id: uid(),
+      email,
+      pass: "",
+      profile: {
+        nickname: p.nickname || email || "匿名",
+        avatar:   p.avatar   || "images/default-avatar.png",
+        gender:   p.gender   || "",
+        age:      p.age      || "",
+        bio:      p.bio      || ""
+      },
+      following: [],
+      followers: []
+    };
+    users.push(u);
+    saveUsers(users);
+  }
+
+  // authUserId が未設定なら紐づける
+  if (!getAuthId()) setAuthId(u.id);
+
+  return u;
 }
