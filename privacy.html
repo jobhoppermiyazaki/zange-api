@@ -19,16 +19,17 @@
   </style>
 </head>
 <body>
-  <header class="site-header">
-    <div class="inner" style="display:flex; align-items:center; justify-content:space-between;">
-      <div class="h-left">
-        <a class="logo" href="index.html">zange</a>
-      </div>
-      <div class="h-right">
-        <div id="currentUserIcon" class="user-ico"></div>
-      </div>
+ <header class="site-header">
+  <div class="inner">
+    <div class="h-left">
+      <a class="logo" href="index.html">zange</a>
     </div>
-  </header>
+    <div class="h-right">
+      <!-- ← これだけあればOK（script.js側が丸アイコンを描画） -->
+      <div id="currentUserIcon" class="user-ico"></div>
+    </div>
+  </div>
+</header>
   <header>
     <h1>プライバシーポリシー</h1>
   </header>
@@ -155,5 +156,13 @@
   </script>
 
   <footer>&copy; 2025 zange (テスト公開中)</footer>
+
+<script src="script.js"></script>
+<script>
+  if (typeof renderHeaderAvatarOnly === 'function') {
+    renderHeaderAvatarOnly(); // 即時1回描画（待機を待たない）
+  }
+</script>
+  
 </body>
 </html>
