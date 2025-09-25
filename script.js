@@ -77,45 +77,77 @@ function isMyPost(z){
   if(me && z.ownerId && String(z.ownerId)===String(me.id)) return true;
   return z.owner==="me"; // 旧データ互換
 }
+// 置き換え版：index のカードに「フォロー/フォロー中」ボタンを常に試みて表示
 function buildOwnerInfoByZange(z){
-  let avatar="images/default-avatar.png", nickname="匿名";
-  const ownerId=z.ownerId||null;
-  if(ownerId){
-    const u=getUsers().find(u=>u.id===ownerId);
-    if(u){ avatar=u.profile?.avatar||avatar; nickname=u.profile?.nickname||nickname; }
-  }else if(z.ownerProfile){
-    avatar=z.ownerProfile.avatar||avatar;
-    nickname=z.ownerProfile.nickname||nickname;
+  let avatar = "images/default-avatar.png", nickname = "匿名";
+  let resolvedOwnerId = z.ownerId || null;
+
+  // 既存の所有者情報を復元
+  if (z.ownerId) {
+    const u = getUsers().find(u => u.id === z.ownerId);
+    if (u) {
+      avatar   = u.profile?.avatar   || avatar;
+      nickname = u.profile?.nickname || nickname;
+    }
+  } else if (z.ownerProfile) {
+    avatar   = z.ownerProfile.avatar   || avatar;
+    nickname = z.ownerProfile.nickname || nickname;
   }
-  const wrap=document.createElement("div");
-  Object.assign(wrap.style,{display:"flex",alignItems:"center",gap:"10px",marginBottom:"6px"});
-  const img=document.createElement("img");
-  Object.assign(img,{src:avatar,alt:"avatar"});
-  Object.assign(img.style,{width:"40px",height:"40px",borderRadius:"50%",objectFit:"cover"});
+
+  // ownerId が無い古い投稿でも、ニックネームが一意ならユーザーを推定
+  if (!resolvedOwnerId && nickname && nickname !== "匿名") {
+    const candidates = getUsers().filter(u => (u.profile?.nickname || "") === nickname);
+    if (candidates.length === 1) {
+      resolvedOwnerId = candidates[0].id;
+      // 投稿データには書き戻さない（既存仕様維持＆安全のため）
+    }
+  }
+
+  // 表示ノード
+  const wrap = document.createElement("div");
+  Object.assign(wrap.style, { display:"flex", alignItems:"center", gap:"10px", marginBottom:"6px" });
+
+  const img = document.createElement("img");
+  Object.assign(img, { src: avatar, alt: "avatar" });
+  Object.assign(img.style, { width:"40px", height:"40px", borderRadius:"50%", objectFit:"cover" });
   wrap.appendChild(img);
-  const name=document.createElement("span");
-  name.textContent=nickname; Object.assign(name.style,{fontWeight:"600",fontSize:"15px"});
+
+  const name = document.createElement("span");
+  name.textContent = nickname;
+  Object.assign(name.style, { fontWeight:"600", fontSize:"15px" });
   wrap.appendChild(name);
 
-  const me=getAuthUser();
-  if(ownerId && me && me.id!==ownerId){
-    const isFollowing=(me.following||[]).includes(ownerId);
-    const btn=document.createElement("button");
-    btn.className="btn"; btn.dataset.followUser=ownerId; btn.style.marginLeft="auto";
-    btn.textContent=isFollowing?"フォロー中":"フォローする";
-    btn.addEventListener("click",()=>{
-      const nowMe=getAuthUser(); if(!nowMe){ alert("ログインが必要です"); return; }
-      ((nowMe.following||[]).includes(ownerId))?unfollowUser(ownerId):followUser(ownerId);
-      const latest=(getAuthUser()?.following||[]).includes(ownerId);
-      document.querySelectorAll(`button[data-follow-user="${ownerId}"]`)
-        .forEach(b=>{ b.textContent=latest?"フォロー中":"フォローする"; b.disabled=false; });
-      renderFollowBoxesSafe();
+  // フォローボタン（自分以外 & 所有者が特定できた時だけ）
+  const me = getAuthUser();
+  if (resolvedOwnerId && me && me.id !== resolvedOwnerId) {
+    const isFollowing = (me.following || []).includes(resolvedOwnerId);
+    const btn = document.createElement("button");
+    btn.className = "btn";
+    btn.dataset.followUser = resolvedOwnerId;
+    btn.style.marginLeft = "auto";
+    btn.textContent = isFollowing ? "フォロー中" : "フォローする";
+
+    btn.addEventListener("click", () => {
+      const nowMe = getAuthUser();
+      if (!nowMe) { alert("ログインが必要です"); return; }
+      ((nowMe.following || []).includes(resolvedOwnerId))
+        ? unfollowUser(resolvedOwnerId)
+        : followUser(resolvedOwnerId);
+
+      const latest = (getAuthUser()?.following || []).includes(resolvedOwnerId);
+      // 同一ユーザーの全ボタンを更新
+      document.querySelectorAll(`button[data-follow-user="${resolvedOwnerId}"]`)
+        .forEach(b => { b.textContent = latest ? "フォロー中" : "フォローする"; b.disabled = false; });
+
+      // 既存仕様のままフォロー欄も更新
+      if (typeof renderFollowBoxesSafe === "function") renderFollowBoxesSafe();
     });
+
     wrap.appendChild(btn);
   }
+
   return wrap;
 }
-
 /* ------------ Seed sample ------------ */
 ;(function seedIfEmpty(){
   const z=getZanges();
