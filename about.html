@@ -5,25 +5,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>このサービスについて - zange</title>
   <link rel="stylesheet" href="style.css">
+
+  <!-- （任意）aboutだけでサイズを小さめにしたい場合の上書き。無くてもOK -->
   <style>
-/* about.html のヘッダーの chip 内だけスコープ */
-#headerUserChip { display: inline-flex; align-items: center; gap: .5rem; }
-#headerUserChip #currentUserIcon{
-  display:inline-flex; align-items:center; justify-content:center;
-  width:32px; height:32px; padding:0; background:transparent; border:0; box-shadow:none;
-}
-#headerUserChip #currentUserIcon img{
-  display:block; width:32px; height:32px; border-radius:50%; object-fit:cover;
-}
-#headerUserChip #currentUserIcon .header-avatar-fallback{
-  width:32px; height:32px; border-radius:50%;
-  display:flex; align-items:center; justify-content:center;
-  background:#e2e8f0; color:#475569; font-size:12px;
-}
-    
+    /* 丸アイコンの見た目（共通script.jsでも注入されますが、aboutで32pxにしたい場合の微調整） */
+    #currentUserIcon.header-avatar-only {
+      width: 32px; height: 32px; padding: 0; background: transparent; border: none; box-shadow: none;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    #currentUserIcon.header-avatar-only img.header-avatar-img {
+      width: 32px; height: 32px; border-radius: 50%; object-fit: cover; display: block;
+    }
+    #currentUserIcon.header-avatar-only .header-avatar-fallback {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: #e2e8f0; color: #475569; display: flex; align-items: center; justify-content: center; font-size: 12px;
+    }
+
+    /* ページ固有の装飾 */
     body { font-family: system-ui, sans-serif; line-height: 1.7; background: #f9fafb; margin: 0; color: #333; }
     header { background: #fff; border-bottom: 1px solid #eee; padding: 12px 16px; position: sticky; top: 0; }
     header h1 { font-size: 18px; margin: 0; }
+    .site-header .inner { display:flex; align-items:center; justify-content:space-between; max-width: 960px; margin: 0 auto; }
+    .site-header .h-left .logo { font-weight:700; font-size:18px; color:#111; text-decoration:none; }
+    .site-header .h-right { display:flex; align-items:center; gap:12px; }
     main { max-width: 720px; margin: 0 auto; padding: 20px; }
     h2 { margin-top: 24px; font-size: 18px; border-left: 4px solid #cab8d9; padding-left: 8px; }
     ul { padding-left: 20px; }
@@ -34,16 +38,20 @@
   </style>
 </head>
 <body>
+  <!-- グローバルヘッダー -->
   <header class="site-header">
     <div class="inner">
       <div class="h-left">
         <a class="logo" href="index.html">zange</a>
       </div>
       <div class="h-right">
+        <!-- 共通script.jsがここに丸アイコンを描画します -->
         <div id="currentUserIcon" class="user-ico"></div>
       </div>
     </div>
   </header>
+
+  <!-- ページ見出し -->
   <header>
     <h1>zangeについて</h1>
   </header>
@@ -120,52 +128,18 @@
   <!-- 右下の投稿FAB（post.html以外で出すのがオススメ） -->
   <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
 
-  <!-- ログイン状態の表示（ヘッダー右上） -->
+  <!-- 共通の挙動（丸アイコン描画・通知バッジなど） -->
+  <script src="script.js"></script>
   <script>
-    async function renderUserIcon(){
-      const box = document.getElementById("currentUserIcon");
-      if (!box) return;
-      try{
-        const res = await fetch("/api/me",{ credentials:"include", cache:"no-store" });
-        const data = await res.json();
-        if (data.ok && data.user){
-          const esc = s => (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m]));
-          const name = data.user.nickname || data.user.email;
-          box.innerHTML = `
-            <span style="display:inline-flex;align-items:center;gap:8px;">
-              <span class="pill" style="padding:6px 10px;border-radius:999px;background:#f1f5f9;">👤 ${esc(name)}</span>
-              <button id="logoutBtn" style="padding:6px 10px;border-radius:10px;border:1px solid #e6e6e6;background:#fff;cursor:pointer">ログアウト</button>
-            </span>`;
-          document.getElementById("logoutBtn")?.addEventListener("click", async()=>{
-            await fetch("/api/logout",{ method:"POST", credentials:"include" });
-            location.reload();
-          });
-        }else{
-          box.innerHTML = `<a href="login.html">ログイン</a>`;
-        }
-      }catch{
-        box.innerHTML = `<a href="login.html">ログイン</a>`;
-      }
+    // about.html はヘッダーに #currentUserIcon をすでに持っているので、
+    // 共通の軽量レンダラを明示的に1回呼んでおく（待機を待たずに即描画）。
+    if (typeof renderHeaderAvatarOnly === 'function') {
+      renderHeaderAvatarOnly();
     }
-    document.addEventListener("DOMContentLoaded", renderUserIcon);
   </script>
 
   <footer>
     &copy; 2025 zange (テスト公開中)
   </footer>
-
-  <script>
-document.addEventListener('DOMContentLoaded', () => {
-  const chip = document.getElementById('headerUserChip');
-  if (chip && !chip.querySelector('#currentUserIcon')) {
-    const box = document.createElement('span');
-    box.id = 'currentUserIcon';
-    chip.appendChild(box);               // 既存テキストは消さない
-  }
-  // 既存の描画関数を呼ぶ（クリック挙動やフォールバック含め現在仕様のまま）
-  if (typeof renderHeaderAvatarOnly === 'function') renderHeaderAvatarOnly();
-});
-</script>
-  
 </body>
 </html>
