@@ -6,6 +6,21 @@
   <title>このサービスについて - zange</title>
   <link rel="stylesheet" href="style.css">
   <style>
+/* about.html のヘッダーの chip 内だけスコープ */
+#headerUserChip { display: inline-flex; align-items: center; gap: .5rem; }
+#headerUserChip #currentUserIcon{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:32px; height:32px; padding:0; background:transparent; border:0; box-shadow:none;
+}
+#headerUserChip #currentUserIcon img{
+  display:block; width:32px; height:32px; border-radius:50%; object-fit:cover;
+}
+#headerUserChip #currentUserIcon .header-avatar-fallback{
+  width:32px; height:32px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  background:#e2e8f0; color:#475569; font-size:12px;
+}
+    
     body { font-family: system-ui, sans-serif; line-height: 1.7; background: #f9fafb; margin: 0; color: #333; }
     header { background: #fff; border-bottom: 1px solid #eee; padding: 12px 16px; position: sticky; top: 0; }
     header h1 { font-size: 18px; margin: 0; }
@@ -138,5 +153,19 @@
   <footer>
     &copy; 2025 zange (テスト公開中)
   </footer>
+
+  <script>
+document.addEventListener('DOMContentLoaded', () => {
+  const chip = document.getElementById('headerUserChip');
+  if (chip && !chip.querySelector('#currentUserIcon')) {
+    const box = document.createElement('span');
+    box.id = 'currentUserIcon';
+    chip.appendChild(box);               // 既存テキストは消さない
+  }
+  // 既存の描画関数を呼ぶ（クリック挙動やフォールバック含め現在仕様のまま）
+  if (typeof renderHeaderAvatarOnly === 'function') renderHeaderAvatarOnly();
+});
+</script>
+  
 </body>
 </html>
