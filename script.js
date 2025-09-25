@@ -1,25 +1,34 @@
-/* ======================= ZANGE script.js (All-in-one) ======================= */
+/* ======================= ZANGE zange-core.js ======================= */
 /* ------------ Storage helpers ------------ */
 function getZanges(){ return JSON.parse(localStorage.getItem("zanges")||"[]"); }
 function saveZanges(z){ localStorage.setItem("zanges", JSON.stringify(z||[])); }
 function getParam(n){ const p=new URLSearchParams(location.search); return p.get(n); }
 
+/* ====== Per-user Profile namespace ====== */
+function _profileKeyFor(email){
+  const e = (email || "").trim().toLowerCase();
+  return e ? `profile:${e}` : "profile";
+}
+function setActiveProfileOwner(email){
+  localStorage.setItem("profile_owner", (email || "").trim().toLowerCase());
+}
+function getActiveProfileOwner(){
+  return (localStorage.getItem("profile_owner") || "").trim().toLowerCase();
+}
+
 /* ------------ Profile helpers ------------ */
 function getProfile(){
-  // まずサーバーログインを参照（/api/me を使っている場合）
   const sessionEmail = getActiveProfileOwner();
   const key = _profileKeyFor(sessionEmail);
   const fallback = localStorage.getItem("profile"); // 旧データ互換
   const json = localStorage.getItem(key) || fallback;
   return json ? JSON.parse(json) : {};
 }
-
 function saveProfile(p){
   const sessionEmail = getActiveProfileOwner();
   const key = _profileKeyFor(sessionEmail);
   localStorage.setItem(key, JSON.stringify(p || {}));
-  // 互換のため旧キーも更新（古い画面で参照していても破綻しないように）
-  localStorage.setItem("profile", JSON.stringify(p || {}));
+  localStorage.setItem("profile", JSON.stringify(p || {})); // 互換
 }
 
 /* ------------ Auth / Users (localStorage) ------------ */
@@ -27,20 +36,54 @@ function getUsers(){ return JSON.parse(localStorage.getItem("users")||"[]"); }
 function saveUsers(list){ localStorage.setItem("users", JSON.stringify(list||[])); }
 function getAuthId(){ return localStorage.getItem("authUserId")||""; }
 function setAuthId(id){ id?localStorage.setItem("authUserId",id):localStorage.removeItem("authUserId"); }
-// 置き換え
+function uid(){ return "u_"+Math.random().toString(36).slice(2,10); }
+
+/* ★サーバーのアクティブオーナー(email)からローカル users/auth を同期 */
+function ensureLocalAuthFromActiveOwner(){
+  const email = (typeof getActiveProfileOwner === "function" ? getActiveProfileOwner() : "") || "";
+  if (!email) return null;
+
+  const users = getUsers();
+  let u = users.find(x => x.email === email);
+
+  // 無ければローカルに“殻ユーザー”を作成（プロフィールは local のものを流用）
+  if (!u) {
+    const p = (typeof getProfile === "function" ? getProfile() : {}) || {};
+    u = {
+      id: uid(),
+      email,
+      pass: "",
+      profile: {
+        nickname: p.nickname || email || "匿名",
+        avatar:   p.avatar   || "images/default-avatar.png",
+        gender:   p.gender   || "",
+        age:      p.age      || "",
+        bio:      p.bio      || ""
+      },
+      following: [],
+      followers: []
+    };
+    users.push(u);
+    saveUsers(users);
+  }
+
+  // authUserId が未設定なら紐づける
+  if (!getAuthId()) setAuthId(u.id);
+
+  return u;
+}
+
+/* 置き換え：サーバーセッションがある場合も“自分”が取れるように */
 function getAuthUser(){
   const id = getAuthId();
   const users = getUsers();
   let u = users.find(x => x.id === id) || null;
   if (u) return u;
-
-  // ★サーバーログイン時のフォールバック
-  return ensureLocalAuthFromActiveOwner();
+  return ensureLocalAuthFromActiveOwner(); // ★サーバー→ローカル同期
 }
-function uid(){ return "u_"+Math.random().toString(36).slice(2,10); }
 
-/* ------------ Public API (signup/login) ------------ */
-function registerUser(email, pass, {nickname='匿名'}={}) {
+/* ------------ Local-only Auth helpers (オフライン運用向け) ------------ */
+function registerUserLocal(email, pass, {nickname='匿名'}={}) {
   const users=getUsers();
   if(users.some(u=>u.email===email)){ alert("このメールは登録済みです"); return false; }
   const id=uid();
@@ -49,17 +92,107 @@ function registerUser(email, pass, {nickname='匿名'}={}) {
     following:[], followers:[]
   };
   users.push(user); saveUsers(users); setAuthId(id);
-  localStorage.setItem("profile", JSON.stringify(user.profile));
+  saveProfile(user.profile);
   return true;
 }
-function loginUser(email, pass){
+function loginUserLocal(email, pass){
   const u=getUsers().find(x=>x.email===email && x.pass===pass);
   if(!u) return false;
   setAuthId(u.id);
-  localStorage.setItem("profile", JSON.stringify(u.profile));
+  saveProfile(u.profile);
   return true;
 }
-function logoutUser(){ setAuthId(""); }
+function logoutUserLocal(){
+  setAuthId("");
+}
+
+/* ===== サーバー側認証 ===== */
+async function registerUser(email, pass, { nickname = "" } = {}) {
+  try{
+    const res = await fetch("/api/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ email, password: pass, nickname })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.ok && data.user) {
+      setActiveProfileOwner(data.user.email);
+      // プロフィール初期化（無ければ）
+      const existed = getProfile();
+      if (!existed || Object.keys(existed).length === 0) {
+        saveProfile({
+          nickname: data.user.nickname || data.user.email || "匿名",
+          avatar: "images/default-avatar.png",
+          gender: "",
+          age: "",
+          bio: ""
+        });
+      }
+      ensureLocalAuthFromActiveOwner(); // ★同期
+      return true;
+    }
+    return false;
+  }catch(_){
+    // オフライン時フォールバック（任意）
+    return registerUserLocal(email, pass, { nickname: nickname || "匿名" });
+  }
+}
+
+async function loginUser(email, pass) {
+  try{
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ email, password: pass })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.ok && data.user) {
+      setActiveProfileOwner(data.user.email);
+      const prof = getProfile();
+      if (!prof || Object.keys(prof).length === 0) {
+        saveProfile({
+          nickname: data.user.nickname || data.user.email || "匿名",
+          avatar: "images/default-avatar.png",
+          gender: "",
+          age: "",
+          bio: ""
+        });
+      }
+      ensureLocalAuthFromActiveOwner(); // ★同期
+      return true;
+    }
+    return false;
+  }catch(_){
+    // オフライン時フォールバック
+    return loginUserLocal(email, pass);
+  }
+}
+
+async function logoutUser() {
+  try{
+    await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
+  }catch(_){}
+  setAuthId("");
+  setActiveProfileOwner("");
+  _meOnce = null;
+  rerender?.();
+  return true;
+}
+
+async function fetchMe() {
+  try{
+    const res = await fetch("/api/me", { credentials: "same-origin", cache: "no-store" });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => ({}));
+    if (data && data.ok && data.user) {
+      setActiveProfileOwner(data.user.email || "");
+      return data.user;
+    }
+  }catch(_){}
+  return null;
+}
 
 /* ------------ Follow ------------ */
 function followUser(targetId){
@@ -86,12 +219,13 @@ function isMyPost(z){
   if(me && z.ownerId && String(z.ownerId)===String(me.id)) return true;
   return z.owner==="me"; // 旧データ互換
 }
-// 置き換え版：index のカードに「フォロー/フォロー中」ボタンを常に試みて表示
+
+/* ========== オーナー表示（フォローボタン付き） ========== */
 function buildOwnerInfoByZange(z){
   let avatar = "images/default-avatar.png", nickname = "匿名";
   let resolvedOwnerId = z.ownerId || null;
 
-  // 既存の所有者情報を復元
+  // 所有者情報
   if (z.ownerId) {
     const u = getUsers().find(u => u.id === z.ownerId);
     if (u) {
@@ -103,13 +237,10 @@ function buildOwnerInfoByZange(z){
     nickname = z.ownerProfile.nickname || nickname;
   }
 
-  // ownerId が無い古い投稿でも、ニックネームが一意ならユーザーを推定
+  // ownerId が無い古い投稿はニックネーム一致で一意に推定
   if (!resolvedOwnerId && nickname && nickname !== "匿名") {
     const candidates = getUsers().filter(u => (u.profile?.nickname || "") === nickname);
-    if (candidates.length === 1) {
-      resolvedOwnerId = candidates[0].id;
-      // 投稿データには書き戻さない（既存仕様維持＆安全のため）
-    }
+    if (candidates.length === 1) resolvedOwnerId = candidates[0].id;
   }
 
   // 表示ノード
@@ -144,11 +275,9 @@ function buildOwnerInfoByZange(z){
         : followUser(resolvedOwnerId);
 
       const latest = (getAuthUser()?.following || []).includes(resolvedOwnerId);
-      // 同一ユーザーの全ボタンを更新
       document.querySelectorAll(`button[data-follow-user="${resolvedOwnerId}"]`)
         .forEach(b => { b.textContent = latest ? "フォロー中" : "フォローする"; b.disabled = false; });
 
-      // 既存仕様のままフォロー欄も更新
       if (typeof renderFollowBoxesSafe === "function") renderFollowBoxesSafe();
     });
 
@@ -157,101 +286,33 @@ function buildOwnerInfoByZange(z){
 
   return wrap;
 }
-/* ------------ Seed sample ------------ */
-;(function seedIfEmpty(){
-  const z=getZanges();
-  if(z.length===0){
-    const now=new Date();
-    saveZanges([{
-      id: now.getTime()-10000,
-      text:"会議中にSlackばっか見てました📱",
-      targets:["上司"], futureTag:"#集中します", scope:"public",
-      timestamp:new Date(now.getTime()-10000).toISOString(),
-      reactions:{pray:0,laugh:1,sympathy:1,growth:1}, comments:[],
-      ownerProfile:{ nickname:"匿名", avatar:"images/default-avatar.png" }
-    }]);
-  }
-})();
 
-/* ------------ Post (post.html) ------------ */
-const postForm=document.getElementById("postForm");
-if(postForm){
-  postForm.addEventListener("submit",e=>{
-    e.preventDefault();
-    const text=(document.getElementById("zangeText")?.value||"").trim();
-    const fixed=(document.getElementById("zangeTargetFixed")?.value||"").trim();
-    const futureTag=(document.getElementById("futureTag")?.value||"").trim();
-    const scope=document.querySelector('input[name="scope"]:checked')?.value||"public";
-    const bg=(document.getElementById("zangeBg")?.value||"").trim();
-    if(!text) return alert("内容入力してください。");
-    if(!fixed) return alert("対象を選んでください。");
-
-    // --- ★ 325文字制限追加 ---
-    if (text.length === 0) {
-      return alert("内容入力してください。");
-    }
-    if (text.length > 325) {
-      return alert("325文字以内で入力してください。");
-    }
-    if (!fixed) {
-      return alert("対象を選んでください。");
-    }
-    // ------------------------
-    
-    const prof=getProfile()||{}; const authUser=getAuthUser();
-    const newZange={
-      id: Date.now(),
-      text, targets:[fixed], futureTag, scope,
-      timestamp:new Date().toISOString(),
-      reactions:{pray:0,laugh:0,sympathy:0,growth:0}, comments:[],
-      bg,
-      ownerId: authUser?authUser.id:null,
-      ownerProfile:{
-        nickname: prof.nickname||(authUser?.profile?.nickname)||"匿名",
-        avatar:   prof.avatar  ||(authUser?.profile?.avatar)  ||"images/default-avatar.png"
-      }
-    };
-    const list=getZanges(); list.unshift(newZange); saveZanges(list);
-    alert("投稿しました！"); location.href="index.html";
-  });
-}
-
-/* ================== Reactions: built-in & custom stamps ================== */
-/* ---- 配置ディレクトリ & カタログ（basename に拡張子は付けない） ---- */
+/* ================== Reactions & Stamps ================== */
 const STAMP_BASE_DIRS = (
   window.STAMP_BASE_DIRS || [
-    'images/stamps',
-    'stamps',
-    'assets/images/stamps',
-    'assets/stamps',
-    'img/stamps',
-    './images/stamps',
-    './stamps',
-    '/images/stamps'
+    'images/stamps','stamps','assets/images/stamps','assets/stamps','img/stamps',
+    './images/stamps','./stamps','/images/stamps'
   ]
 );
-
-// 画像は <dir>/<basename>.(png|webp|jpg|jpeg) を順に探索
 const STAMP_CATALOG = [
-  { key:'zange',  label:'ZANGE', basename:'ZANGE' },
-  { key:'erai',     label:'えらい',       basename:'erai' },
-  { key:'Oh',  label:'Oh',   basename:'Oh' },
-  { key:'nanyate',   label:'なんやて',   basename:'nanyate' },
-  { key:'wakaru', label:'わかる',   basename:'wakaru' },
-  { key:'wwww', label:'wwww',   basename:'wwww' },
-  { key:'YES', label:'YES',   basename:'YES' },
-  { key:'e', label:'え？',   basename:'e' },
-  { key:'ho', label:'ほぅ',   basename:'ho' },
-  { key:'yaba', label:'やば',   basename:'yaba' },
-  { key:'otsu', label:'おつかれ',   basename:'otsu' },
-  { key:'kini', label:'きになる',   basename:'kini' },
-  { key:'n', label:'ん？',   basename:'n' },
-  { key:'onaji', label:'同じく',   basename:'onaji' },
-  { key:'no', label:'NO',   basename:'NO' },
+  { key:'zange',label:'ZANGE',basename:'ZANGE' },
+  { key:'erai',label:'えらい',basename:'erai' },
+  { key:'Oh',label:'Oh',basename:'Oh' },
+  { key:'nanyate',label:'なんやて',basename:'nanyate' },
+  { key:'wakaru',label:'わかる',basename:'wakaru' },
+  { key:'wwww',label:'wwww',basename:'wwww' },
+  { key:'YES',label:'YES',basename:'YES' },
+  { key:'e',label:'え？',basename:'e' },
+  { key:'ho',label:'ほぅ',basename:'ho' },
+  { key:'yaba',label:'やば',basename:'yaba' },
+  { key:'otsu',label:'おつかれ',basename:'otsu' },
+  { key:'kini',label:'きになる',basename:'kini' },
+  { key:'n',label:'ん？',basename:'n' },
+  { key:'onaji',label:'同じく',basename:'onaji' },
+  { key:'no',label:'NO',basename:'NO' },
 ];
 const BUILTIN_REACTIONS=['pray','laugh','sympathy','growth'];
 
-/* ---- Safe image loader ---- */
 function loadImgWithFallback(imgEl, candidates, onSuccess, onFail){
   let i=0;
   function next(){
@@ -261,8 +322,6 @@ function loadImgWithFallback(imgEl, candidates, onSuccess, onFail){
   }
   next();
 }
-
-/* ---- 候補 URL 生成（固定文字列は廃止） ---- */
 function buildStampCandidates(basename){
   const exts = ['png','webp','jpg','jpeg'];
   const urls = [];
@@ -272,14 +331,12 @@ function buildStampCandidates(basename){
   });
   return urls;
 }
-
-/* ---- Skin built-in reaction buttons to image + count ---- */
 function skinReactionButtons(root = document){
   const MAP = {
-    pray:     { src:'images/reactions/pray.png',     emoji:'🙏' },
-    laugh:    { src:'images/reactions/laugh.png',    emoji:'😂' },
-    sympathy: { src:'images/reactions/sympathy.png', emoji:'🤝' },
-    growth:   { src:'images/reactions/growth.png',   emoji:'🌱' },
+    pray:{src:'images/reactions/pray.png',emoji:'🙏'},
+    laugh:{src:'images/reactions/laugh.png',emoji:'😂'},
+    sympathy:{src:'images/reactions/sympathy.png',emoji:'🤝'},
+    growth:{src:'images/reactions/growth.png',emoji:'🌱'},
   };
   root.querySelectorAll('.reactions button').forEach(btn=>{
     if(btn.classList.contains('rx-btn')) return;
@@ -304,8 +361,6 @@ function skinReactionButtons(root = document){
     }
   });
 }
-
-/* ---- Ensure "+" button ---- */
 function ensurePlusButton(host, postId){
   if(host.querySelector(`button.rx-add[data-post="${postId}"]`)) return;
   const plus=document.createElement('button');
@@ -314,8 +369,6 @@ function ensurePlusButton(host, postId){
   plus.onclick=()=>openStampPicker(postId);
   host.appendChild(plus);
 }
-
-/* ---- Ensure a custom-stamp button exists in host ---- */
 function ensureCustomStampButtonInHost(host, postId, key, count){
   if (host.querySelector(`button[onclick="reactStamp(${postId}, '${key}')"]`)) return;
   const info = STAMP_CATALOG.find(x => x.key === key); if (!info) return;
@@ -336,8 +389,6 @@ function ensureCustomStampButtonInHost(host, postId, key, count){
   const plus=host.querySelector(`button.rx-add[data-post="${postId}"]`);
   if(plus) host.insertBefore(btn,plus); else host.appendChild(btn);
 }
-
-/* ---- After a card's reactions HTML inserted ---- */
 function finishReactionsRender(hostOrCard, zange){
   const host=hostOrCard?.classList?.contains('reactions') ? hostOrCard : hostOrCard?.querySelector?.('.reactions');
   if(!host) return;
@@ -348,21 +399,15 @@ function finishReactionsRender(hostOrCard, zange){
     .filter(([k])=>!BUILTIN_REACTIONS.includes(k))
     .forEach(([k,v])=> ensureCustomStampButtonInHost(host, zange.id, k, v||0));
 }
-
-/* ---- Update count helper ---- */
 function updateStampCountDisplay(postId,key,count){
   document.querySelectorAll(`button[onclick="reactStamp(${postId}, '${key}')"] .rx-count`)
     .forEach(span=>span.textContent=count);
 }
-
-/* ---- Lookup all hosts for this post and add button if missing ---- */
 function addButtonToAllHosts(postId,key,count){
   const anchors=document.querySelectorAll(`button[onclick^="react(${postId},"]`);
   const hosts=new Set(); anchors.forEach(a=>{ const h=a.closest('.reactions'); if(h) hosts.add(h); });
   hosts.forEach(h=>{ ensurePlusButton(h,postId); ensureCustomStampButtonInHost(h,postId,key,count); });
 }
-
-/* ---- Built-in reaction click ---- */
 function react(id,type){
   const zanges=getZanges(); const z=zanges.find(x=>x.id===id); if(!z) return;
   z.reactions[type]=(z.reactions[type]||0)+1; saveZanges(zanges);
@@ -381,8 +426,6 @@ function react(id,type){
     updateNotifBadge();
   }
 }
-
-/* ---- Custom-stamp click ---- */
 function reactStamp(id,key){
   const zanges=getZanges(); const z=zanges.find(x=>String(x.id)===String(id)); if(!z) return;
   if(!z.reactions) z.reactions={pray:0,laugh:0,sympathy:0,growth:0};
@@ -401,7 +444,7 @@ function reactStamp(id,key){
   }
 }
 
-/* ---- Stamp picker modal (auto-injected) ---- */
+/* ---- Stamp picker (modal) ---- */
 let _stampModalBuilt=false, _stampPickTargetId=null;
 function buildStampModalOnce(){
   if (_stampModalBuilt) return;
@@ -429,6 +472,224 @@ document.addEventListener('click', e=>{
   const back=document.getElementById('stampModalBackdrop'); if(!back || back.style.display!=='block') return;
   const key=cell.dataset.key; if(_stampPickTargetId!=null){ reactStamp(_stampPickTargetId,key); closeStampPicker(); }
 });
+
+/* ================== Notifications ================== */
+function getNotificationsFor(uid){ return JSON.parse(localStorage.getItem("notifications_"+uid)||"[]"); }
+function saveNotificationsFor(uid,list){ localStorage.setItem("notifications_"+uid, JSON.stringify(list||[])); }
+function addNotificationFor(uid,payload){ if(!uid) return; const list=getNotificationsFor(uid); list.unshift({id:"n_"+Date.now(),read:false,ts:new Date().toISOString(),...payload}); saveNotificationsFor(uid,list); }
+function updateNotifBadge(){
+  const me=getAuthUser(); const badge=document.getElementById("notifBadge");
+  if(!badge){ return; }
+  if(!me){ badge.style.display="none"; return; }
+  const unread=getNotificationsFor(me.id).filter(n=>!n.read).length;
+  if(unread>0){ badge.textContent=unread; badge.style.display="inline-block"; }
+  else badge.style.display="none";
+}
+document.addEventListener("DOMContentLoaded", updateNotifBadge);
+
+/* ===== Header avatar: lightweight & stable ===== */
+(function(){
+  if (document.getElementById("headerAvatarCss")) return;
+  const style = document.createElement("style");
+  style.id = "headerAvatarCss";
+  style.textContent = `
+    .header-avatar-only{
+      padding:0!important;background:transparent!important;border:none!important;box-shadow:none!important;
+      display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;
+    }
+    .header-avatar-only img.header-avatar-img{display:block;width:40px;height:40px;border-radius:50%;object-fit:cover;}
+    .header-avatar-only .header-avatar-fallback{width:40px;height:40px;border-radius:50%;background:#ccc;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;}
+  `;
+  document.head.appendChild(style);
+})();
+let _meOnce;
+function fetchMeOnce(){
+  if (!_meOnce && typeof fetchMe === "function") _meOnce = fetchMe().catch(()=>null);
+  return _meOnce || Promise.resolve(null);
+}
+async function _getHeaderAvatarInfo(){
+  try{
+    const meLocal = (typeof getAuthUser==="function") ? getAuthUser() : null;
+    if (meLocal) {
+      return { loggedIn:true, title: meLocal.profile?.nickname || meLocal.email || "ユーザー", avatar: meLocal.profile?.avatar || "images/default-avatar.png" };
+    }
+    const svr = await fetchMeOnce();
+    if (svr && (svr.email || svr.nickname)){
+      const p = (typeof getProfile==="function" ? getProfile() : {}) || {};
+      return { loggedIn:true, title: p.nickname || svr.nickname || svr.email || "ユーザー", avatar: p.avatar || "images/default-avatar.png" };
+    }
+  }catch(_){}
+  return { loggedIn:false };
+}
+function _ensureHeaderIconBox(){
+  let box = document.getElementById('currentUserIcon');
+  if (box) return box;
+  const isAbout = location.pathname.endsWith('about.html');
+  if (isAbout) {
+    const chip = document.querySelector('#headerUserChip');
+    if (chip) {
+      box = chip.querySelector('#currentUserIcon');
+      if (!box) {
+        box = document.createElement('span');
+        box.id = 'currentUserIcon';
+        box.className = 'header-avatar-only';
+        chip.appendChild(box);
+      }
+      return box;
+    }
+  }
+  const holder = document.querySelector('#headerUserChip, .header-user, .nav-user, .user-chip, #headerUser, .header-actions .user, .navbar .user');
+  if (holder) {
+    box = holder.querySelector('#currentUserIcon');
+    if (!box) {
+      box = document.createElement('span');
+      box.id = 'currentUserIcon';
+      box.className = 'header-avatar-only';
+      holder.appendChild(box);
+    }
+    return box;
+  }
+  const header = document.querySelector('header .header-actions, header .container, header, .topbar, .appbar');
+  if (header){
+    box = document.createElement('span');
+    box.id = 'currentUserIcon';
+    box.className = 'header-avatar-only';
+    header.appendChild(box);
+    return box;
+  }
+  return null;
+}
+let _headerRenderedHTML = "";
+async function renderHeaderAvatarOnly(){
+  const box = _ensureHeaderIconBox();
+  if (!box) return false;
+
+  const info = await _getHeaderAvatarInfo();
+  let nextHTML = "";
+  if (info.loggedIn){
+    nextHTML = `<img src="${info.avatar || "images/default-avatar.png"}" alt="${(info.title||"ユーザー").replace(/"/g,"&quot;")}" title="${(info.title||"").replace(/"/g,"&quot;")}" class="header-avatar-img">`;
+  }else{
+    nextHTML = `<div class="header-avatar-fallback">未</div>`;
+  }
+  if (_headerRenderedHTML === nextHTML) return true;
+
+  box.classList.add("header-avatar-only");
+  box.innerHTML = nextHTML;
+  const img = box.querySelector("img");
+  if (img){ img.onerror = ()=>{ img.src="images/default-avatar.png"; }; }
+
+  box.style.cursor = "pointer";
+  box.onclick = async ()=>{
+    const state = await _getHeaderAvatarInfo();
+    if (state.loggedIn){
+      if (confirm("ログアウトしますか？")){
+        if (typeof logoutUser==="function") await logoutUser();
+        alert("ログアウトしました");
+        location.href="login.html";
+      }
+    }else{
+      if (confirm("ログインしますか？")) location.href="login.html";
+    }
+  };
+
+  _headerRenderedHTML = nextHTML;
+  return true;
+}
+function waitAndRenderHeader(){
+  let tries = 0;
+  const tm = setInterval(async ()=>{
+    tries++;
+    if (await renderHeaderAvatarOnly() || tries >= 30) clearInterval(tm);
+  }, 100);
+}
+const _debounce = (fn, ms=200)=>{ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; };
+const rerender = _debounce(renderHeaderAvatarOnly, 150);
+document.addEventListener("DOMContentLoaded", waitAndRenderHeader);
+window.addEventListener("pageshow", rerender);
+window.addEventListener("focus", rerender);
+(function hookSaveProfile(){
+  if (window.__light_hookedSaveProfile) return;
+  window.__light_hookedSaveProfile = true;
+  const orig = window.saveProfile;
+  if (typeof orig === "function") {
+    window.saveProfile = function(p){
+      const r = orig.apply(this, arguments);
+      try{ rerender(); }catch(_){}
+      return r;
+    };
+  }
+})();
+window.addEventListener("storage", (e)=>{
+  if (!e.key) return;
+  if (e.key === "profile" || e.key === "profile_owner" || e.key.startsWith("profile:")) rerender();
+});
+
+/* ===== グローバル公開（inline onclick 対応のため） ===== */
+try{
+  window.react = react;
+  window.reactStamp = reactStamp;
+  window.openStampPicker = openStampPicker;
+  window.closeStampPicker = closeStampPicker;
+  window.finishReactionsRender = finishReactionsRender;
+  window.getAuthUser = getAuthUser;
+  window.followUser = followUser;
+  window.unfollowUser = unfollowUser;
+  window.registerUser = registerUser;
+  window.loginUser = loginUser;
+  window.logoutUser = logoutUser;
+  window.fetchMe = fetchMe;
+  window.updateNotifBadge = updateNotifBadge;
+} catch(_) {}
+
+/* ======================= END zange-core.js ======================= */
+/* ======================= ZANGE zange-pages.js ======================= */
+/* ------------ Seed sample (初回だけ) ------------ */
+;(function seedIfEmpty(){
+  const z=getZanges();
+  if(z.length===0){
+    const now=new Date();
+    saveZanges([{
+      id: now.getTime()-10000,
+      text:"会議中にSlackばっか見てました📱",
+      targets:["上司"], futureTag:"#集中します", scope:"public",
+      timestamp:new Date(now.getTime()-10000).toISOString(),
+      reactions:{pray:0,laugh:1,sympathy:1,growth:1}, comments:[],
+      ownerProfile:{ nickname:"匿名", avatar:"images/default-avatar.png" }
+    }]);
+  }
+})();
+
+/* ------------ Post (post.html) ------------ */
+const postForm=document.getElementById("postForm");
+if(postForm){
+  postForm.addEventListener("submit",e=>{
+    e.preventDefault();
+    const text=(document.getElementById("zangeText")?.value||"").trim();
+    const fixed=(document.getElementById("zangeTargetFixed")?.value||"").trim();
+    const futureTag=(document.getElementById("futureTag")?.value||"").trim();
+    const scope=document.querySelector('input[name="scope"]:checked')?.value||"public";
+    const bg=(document.getElementById("zangeBg")?.value||"").trim();
+    if(!text) return alert("内容入力してください。");
+    if(!fixed) return alert("対象を選んでください。");
+    if (text.length > 325) return alert("325文字以内で入力してください。");
+
+    const prof=getProfile()||{}; const authUser=getAuthUser();
+    const newZange={
+      id: Date.now(),
+      text, targets:[fixed], futureTag, scope,
+      timestamp:new Date().toISOString(),
+      reactions:{pray:0,laugh:0,sympathy:0,growth:0}, comments:[],
+      bg,
+      ownerId: authUser?authUser.id:null,
+      ownerProfile:{
+        nickname: prof.nickname||(authUser?.profile?.nickname)||"匿名",
+        avatar:   prof.avatar  ||(authUser?.profile?.avatar)  ||"images/default-avatar.png"
+      }
+    };
+    const list=getZanges(); list.unshift(newZange); saveZanges(list);
+    alert("投稿しました！"); location.href="index.html";
+  });
+}
 
 /* ================== Timeline (index.html) ================== */
 const timeline=document.getElementById("timeline");
@@ -503,7 +764,7 @@ if(timeline){
   });
 }
 
-/* ================== Detail page ================== */
+/* ================== Detail page (detail.html) ================== */
 ;(function initDetailPage(){
   const host=document.getElementById('detailCard')||document.getElementById('detailContainer'); if(!host) return;
   const id=getParam('id'); if(!id){ host.innerHTML='<p class="muted">投稿が見つかりませんでした。</p>'; return; }
@@ -569,11 +830,8 @@ if(timeline){
       const textInput=document.getElementById('commentText')||document.getElementById('cText');
       const name=(nameInput?.value||getProfile().nickname||'匿名').trim();
       const text=(textInput?.value||'').trim(); if(!text){ alert('コメントを入力してください。'); return; }
-      // ★ここに文字数チェックを追加
-      if(text.length > 33){
-        alert('コメントは32.5文字以内で入力してください。');
-        return;
-      }
+      if(text.length > 33){ alert('コメントは32.5文字以内で入力してください。'); return; }
+
       const all=getZanges(); const target=all.find(x=>String(x.id)===String(id)); if(!target){ alert('投稿が見つかりません。'); return; }
       if(!Array.isArray(target.comments)) target.comments=[];
       target.comments.push({user:name||'匿名', text, ts:new Date().toISOString()}); saveZanges(all);
@@ -694,277 +952,18 @@ function getTodayTopics(){
   });
 })();
 
-/* ================== Notifications ================== */
-function getNotificationsFor(uid){ return JSON.parse(localStorage.getItem("notifications_"+uid)||"[]"); }
-function saveNotificationsFor(uid,list){ localStorage.setItem("notifications_"+uid, JSON.stringify(list||[])); }
-function addNotificationFor(uid,payload){ if(!uid) return; const list=getNotificationsFor(uid); list.unshift({id:"n_"+Date.now(),read:false,ts:new Date().toISOString(),...payload}); saveNotificationsFor(uid,list); }
-function updateNotifBadge(){
-  const me=getAuthUser(); const badge=document.getElementById("notifBadge");
-  if(!badge){ return; }
-  if(!me){ badge.style.display="none"; return; }
-  const unread=getNotificationsFor(me.id).filter(n=>!n.read).length;
-  if(unread>0){ badge.textContent=unread; badge.style.display="inline-block"; }
-  else badge.style.display="none";
-}
-document.addEventListener("DOMContentLoaded", updateNotifBadge);
-;(function initNotificationsPage(){
-  const list=document.getElementById("notificationList"); if(!list) return;
-  const me=getAuthUser(); if(!me){ list.innerHTML="<p>通知を見るにはログインしてください。</p>"; return; }
-  const items=getNotificationsFor(me.id);
-  if(items.length===0){ list.innerHTML="<p>新しい通知はありません。</p>"; return; }
-  list.innerHTML="";
-  items.forEach(n=>{
-    const li=document.createElement("li"); li.className="card";
-    li.innerHTML=`<div>${n.text}</div><small>${new Date(n.ts).toLocaleString()}</small>${n.url?`<a href="${n.url}">投稿を開く</a>`:""}`;
-    list.appendChild(li);
-  });
-  saveNotificationsFor(me.id, items.map(x=>({...x,read:true})));
-  updateNotifBadge();
-})();
-
-/* ===== Header avatar: lightweight & stable ===== */
-
-/* 1) CSS（1回だけ） */
-(function(){
-  if (document.getElementById("headerAvatarCss")) return;
-  const style = document.createElement("style");
-  style.id = "headerAvatarCss";
-  style.textContent = `
-    .header-avatar-only {
-  padding: 0 !important;
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-}
-
-.header-avatar-only img.header-avatar-img {
-  display: block;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.header-avatar-only .header-avatar-fallback {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: #ccc;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-}
-  `;
-  document.head.appendChild(style);
-})();
-
-/* 2) 参照先（できるだけ限定） */
-function _resolveHeaderBox(){
-  return (
-    document.getElementById("currentUserIcon") ||
-    document.querySelector("#headerUserChip") ||
-    document.querySelector(".header-user")
-  );
-}
-
-/* 3) /api/me は1ページにつき1回だけ */
-let _meOnce;
-function fetchMeOnce(){
-  if (!_meOnce && typeof fetchMe === "function") {
-    _meOnce = fetchMe().catch(()=>null);
-  }
-  return _meOnce || Promise.resolve(null);
-}
-
-/* 4) 表示データ取得（ローカル優先 → /api/me → 未ログイン） */
-async function _getHeaderAvatarInfo(){
-  try{
-    const meLocal = (typeof getAuthUser==="function") ? getAuthUser() : null;
-    if (meLocal) {
-      return {
-        loggedIn: true,
-        title : meLocal.profile?.nickname || meLocal.email || "ユーザー",
-        avatar: meLocal.profile?.avatar || "images/default-avatar.png"
-      };
-    }
-    const svr = await fetchMeOnce();
-    if (svr && (svr.email || svr.nickname)){
-      const p = (typeof getProfile==="function" ? getProfile() : {}) || {};
-      return {
-        loggedIn: true,
-        title : p.nickname || svr.nickname || svr.email || "ユーザー",
-        avatar: p.avatar || "images/default-avatar.png"
-      };
-    }
-  }catch(_){}
-  return { loggedIn:false };
-}
-
-// ▼ これに置き換え
-function _ensureHeaderIconBox(){
-  // 既存があればそのまま使う
-  let box = document.getElementById('currentUserIcon');
-  if (box) return box;
-
-  // about.html は #headerUserChip の“中に”専用コンテナを足す（消さない）
-  const isAbout = location.pathname.endsWith('about.html');
-  if (isAbout) {
-    const chip = document.querySelector('#headerUserChip');
-    if (chip) {
-      box = chip.querySelector('#currentUserIcon');
-      if (!box) {
-        box = document.createElement('span');
-        box.id = 'currentUserIcon';
-        box.className = 'header-avatar-only';
-        chip.appendChild(box);               // ← innerHTML を消さない
-      }
-      return box;
-    }
-  }
-
-  // その他ページ：既存のユーザー表示領域があれば、その“中に”追加（消さない）
-  const holder = document.querySelector(
-    '#headerUserChip, .header-user, .nav-user, .user-chip, #headerUser, .header-actions .user, .navbar .user'
-  );
-  if (holder) {
-    box = holder.querySelector('#currentUserIcon');
-    if (!box) {
-      box = document.createElement('span');
-      box.id = 'currentUserIcon';
-      box.className = 'header-avatar-only';
-      holder.appendChild(box);               // ← 置換せず追加
-    }
-    return box;
-  }
-
-  // 最終フォールバック：ヘッダー末尾に追加
-  const header = document.querySelector('header .header-actions, header .container, header, .topbar, .appbar');
-  if (header){
-    box = document.createElement('span');
-    box.id = 'currentUserIcon';
-    box.className = 'header-avatar-only';
-    header.appendChild(box);
-    return box;
-  }
-  return null;
-}
-
-/* 5) 描画（必要なときだけ再利用） */
-let _headerRenderedHTML = "";   // 不要な再描画を避ける簡易キャッシュ
-async function renderHeaderAvatarOnly(){
-  const box = _ensureHeaderIconBox();   // ← ここを差し替え
-  if (!box) return false;
-
-  const info = await _getHeaderAvatarInfo();
-
-  // 次に描く HTML を作成（丸アイコン専用）
-  let nextHTML = "";
-  if (info.loggedIn){
-    nextHTML = `
-      <img
-        src="${info.avatar || "images/default-avatar.png"}"
-        alt="${(info.title||"ユーザー").replace(/"/g,"&quot;")}"
-        title="${(info.title||"").replace(/"/g,"&quot;")}"
-        class="header-avatar-img"
-      >
-    `;
-  }else{
-    nextHTML = `
-      <div class="header-avatar-fallback">未</div>
-    `;
-  }
-
-  // 変化なければ描画スキップ
-  if (_headerRenderedHTML === nextHTML) return true;
-
-  box.classList.add("header-avatar-only");
-  box.innerHTML = nextHTML;
-
-  // フォールバック処理
-  const img = box.querySelector("img");
-  if (img){
-    img.onerror = ()=>{ img.src="images/default-avatar.png"; };
-  }
-
-  // クリック動作（既存仕様を踏襲）
-  box.style.cursor = "pointer";
-  box.onclick = async ()=>{
-    const state = await _getHeaderAvatarInfo();
-    if (state.loggedIn){
-      if (confirm("ログアウトしますか？")){
-        if (typeof logoutUser==="function") await logoutUser();
-        alert("ログアウトしました");
-        location.href="login.html";
-      }
-    }else{
-      if (confirm("ログインしますか？")) location.href="login.html";
-    }
-  };
-
-  _headerRenderedHTML = nextHTML;
-  return true;
-}
-/* 6) 要素待ち（最大 10 回 / 1 秒）— 重い全 DOM 監視はしない */
-// ▼ 置き換え：最大 10回 → 30回（~3秒）に増やす
-function waitAndRenderHeader(){
-  let tries = 0;
-  const tm = setInterval(async ()=>{
-    tries++;
-    if (await renderHeaderAvatarOnly() || tries >= 30) clearInterval(tm);
-  }, 100);
-}
-
-/* 7) 軽量イベントでだけ再描画（全部デバウンス） */
-const _debounce = (fn, ms=200)=>{
-  let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); };
-};
-const rerender = _debounce(renderHeaderAvatarOnly, 150);
-
-document.addEventListener("DOMContentLoaded", waitAndRenderHeader);
-window.addEventListener("pageshow", rerender);
-window.addEventListener("focus", rerender);
-
-/* saveProfile をフックして再描画（既存関数があれば） */
-(function hookSaveProfile(){
-  if (window.__light_hookedSaveProfile) return;
-  window.__light_hookedSaveProfile = true;
-  const orig = window.saveProfile;
-  if (typeof orig === "function") {
-    window.saveProfile = function(p){
-      const r = orig.apply(this, arguments);
-      try{ rerender(); }catch(_){}
-      return r;
-    };
-  }
-})();
-
-/* storage 変化時（プロフ関連だけ） */
-window.addEventListener("storage", (e)=>{
-  if (!e.key) return;
-  if (e.key === "profile" || e.key === "profile_owner" || e.key.startsWith("profile:")) rerender();
-});
 /* ================== settings.html ================== */
 async function initProfileUI(){
   const view=document.getElementById("profileView");
   const edit=document.getElementById("profileEdit");
   if(!view || !edit) return;
 
-  // ★ 追加：サーバーセッションがあれば、そのユーザーのメールを
-  //   アクティブなプロフィール所有者として同期（無ければ何もしない）
   if (typeof fetchMe === "function") {
     try {
       const me = await fetchMe();
       if (me && me.email) setActiveProfileOwner(me.email);
-    } catch (e) {
-      // fetchMe が失敗してもローカル保存のプロフィールで続行
-    }
+      ensureLocalAuthFromActiveOwner(); // ★同期
+    } catch (e) {}
   }
 
   function renderProfileView(p){
@@ -979,7 +978,6 @@ async function initProfileUI(){
     if(ag) ag.textContent=`年齢: ${p.age||"—"}`;
     if(b) b.textContent=`自己紹介: ${p.bio||"—"}`;
   }
-
   function renderProfileEdit(p){
     const nick=document.getElementById("profileNickname"),
           gen=document.getElementById("profileGender"),
@@ -993,7 +991,6 @@ async function initProfileUI(){
     if(prev) prev.src=p.avatar||"images/default-avatar.png";
   }
 
-  // ここで改めて現在のプロフィールを取得して描画
   const p=getProfile();
   renderProfileView(p);
   renderProfileEdit(p);
@@ -1001,7 +998,6 @@ async function initProfileUI(){
   document.getElementById("editProfileBtn")?.addEventListener("click",()=>{
     view.style.display="none"; edit.style.display="block";
   });
-
   document.getElementById("profileSaveBtn")?.addEventListener("click",()=>{
     const payload={
       nickname:document.getElementById("profileNickname")?.value?.trim()||"",
@@ -1012,7 +1008,6 @@ async function initProfileUI(){
     };
     saveProfile(payload);
 
-    // ローカルユーザー一覧（旧仕様）側も同期
     const me=getAuthUser();
     if(me){
       const users=getUsers(); const i=users.findIndex(u=>u.id===me.id);
@@ -1023,12 +1018,10 @@ async function initProfileUI(){
     view.style.display="block"; edit.style.display="none";
     alert("プロフィールを保存しました");
   });
-
   document.getElementById("profileCancelBtn")?.addEventListener("click",()=>{
     renderProfileEdit(getProfile());
     view.style.display="block"; edit.style.display="none";
   });
-
   document.getElementById("profileAvatarInput")?.addEventListener("change",(e)=>{
     const f=e.target.files?.[0]; if(!f) return;
     const r=new FileReader();
@@ -1271,121 +1264,37 @@ document.addEventListener('DOMContentLoaded', ()=>{
     finishReactionsRender(card, z||{id:0,reactions:{}});
   });
 });
-// ===== サーバー側認証版 =====
-async function registerUser(email, pass, { nickname = "" } = {}) {
-  const res = await fetch("/api/signup", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "same-origin",
-    body: JSON.stringify({ email, password: pass, nickname })
-  });
-  const data = await res.json().catch(() => ({}));
-  if (res.ok && data.ok && data.user) {
-    setActiveProfileOwner(data.user.email);
-    // プロフィール初期化（無ければ）
-    const existed = getProfile();
-    if (!existed || Object.keys(existed).length === 0) {
-      saveProfile({
-        nickname: data.user.nickname || data.user.email || "匿名",
-        avatar: "images/default-avatar.png",
-        gender: "",
-        age: "",
-        bio: ""
-      });
+
+/* ===== 初期同期（/api/me → ローカル）を試行 ===== */
+(async ()=>{
+  try{
+    if (typeof fetchMe === "function") {
+      const me = await fetchMe();
+      if (me && me.email) {
+        setActiveProfileOwner(me.email);
+        ensureLocalAuthFromActiveOwner(); // ローカル users/auth と同期
+        if (typeof rerender === "function") rerender(); // ヘッダーの丸アイコン更新
+      }
     }
-    return true;
+  }catch(_){}
+})();
+
+/* ===== 画面復帰やタブ間同期での再描画 ===== */
+window.addEventListener("pageshow", updateNotifBadge);
+window.addEventListener("focus", updateNotifBadge);
+window.addEventListener("storage", (e)=>{
+  if (!e.key) return;
+  // フォロー関係や投稿が他タブで変化したら、必要箇所を軽く更新
+  if (e.key === "users" || e.key === "zanges") {
+    try{ if (typeof renderFollowBoxesSafe === "function") renderFollowBoxesSafe(); }catch(_){}
+    // 既存カードのフォローボタンやリアクション表示を保険で更新
+    document.querySelectorAll('.card').forEach(card=>{
+      const link=card.querySelector('a[href^="detail.html?id="]');
+      const id=link?Number(new URL(link.href, location.href).searchParams.get('id')):null;
+      const z=(id && getZanges().find(x=>Number(x.id)===id)) || null;
+      finishReactionsRender(card, z||{id:0,reactions:{}});
+    });
   }
-  return false;
-}
+});
 
-async function loginUser(email, pass) {
-  const res = await fetch("/api/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "same-origin",
-    body: JSON.stringify({ email, password: pass })
-  });
-  const data = await res.json().catch(() => ({}));
-  if (res.ok && data.ok && data.user) {
-    setActiveProfileOwner(data.user.email);
-    // 既存プロフが無ければ最低限を用意
-    const prof = getProfile();
-    if (!prof || Object.keys(prof).length === 0) {
-      saveProfile({
-        nickname: data.user.nickname || data.user.email || "匿名",
-        avatar: "images/default-avatar.png",
-        gender: "",
-        age: "",
-        bio: ""
-      });
-    }
-    // サーバー版 loginUser 内の return true の直前あたりに1行追加
-ensureLocalAuthFromActiveOwner();
-    return true;
-  }
-  return false;
-}
-
-async function logoutUser() {
-  await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
-  // アクティブオーナーを解除（次回は旧互換の "profile" を参照）
-  setActiveProfileOwner("");
-  return true;
-}
-
-async function fetchMe() {
-  const res = await fetch("/api/me", { credentials: "same-origin", cache: "no-store" });
-  const data = await res.json().catch(() => ({}));
-  if (data && data.ok && data.user) {
-    // /api/me ベースでオーナーを同期させる（タブ再読込時など）
-    setActiveProfileOwner(data.user.email || "");
-    return data.user;
-  }
-  return null;
-}
-
-/* ====== Per-user Profile namespace (fix for settings page) ====== */
-function _profileKeyFor(email){
-  const e = (email || "").trim().toLowerCase();
-  return e ? `profile:${e}` : "profile";
-}
-function setActiveProfileOwner(email){
-  localStorage.setItem("profile_owner", (email || "").trim().toLowerCase());
-}
-function getActiveProfileOwner(){
-  return (localStorage.getItem("profile_owner") || "").trim().toLowerCase();
-}
-// ★追加：サーバーのアクティブオーナー(email)からローカル users/auth を同期
-function ensureLocalAuthFromActiveOwner(){
-  const email = (typeof getActiveProfileOwner === "function" ? getActiveProfileOwner() : "") || "";
-  if (!email) return null;
-
-  const users = getUsers();
-  let u = users.find(x => x.email === email);
-
-  // なければローカルに“殻ユーザー”を作る（プロフィールは local のものを利用）
-  if (!u) {
-    const p = (typeof getProfile === "function" ? getProfile() : {}) || {};
-    u = {
-      id: uid(),
-      email,
-      pass: "",
-      profile: {
-        nickname: p.nickname || email || "匿名",
-        avatar:   p.avatar   || "images/default-avatar.png",
-        gender:   p.gender   || "",
-        age:      p.age      || "",
-        bio:      p.bio      || ""
-      },
-      following: [],
-      followers: []
-    };
-    users.push(u);
-    saveUsers(users);
-  }
-
-  // authUserId が未設定なら紐づける
-  if (!getAuthId()) setAuthId(u.id);
-
-  return u;
-}
+/* ======================= END zange-pages.js ======================= */
