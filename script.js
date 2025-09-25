@@ -766,22 +766,31 @@ async function _getHeaderAvatarInfo(){
   return { loggedIn:false };
 }
 
-// ▼ 1) about.html でも確実にヘッダー用コンテナを取得/用意する
+// ▼ 置き換え：ヘッダー用アイコンコンテナの解決（about.html対応）
 function _ensureHeaderIconBox(){
-  // まず既定
+  // 既定
   let box = document.getElementById('currentUserIcon');
   if (box) return box;
 
-  // 既存の「ユーザー名チップ」などをコンテナ化（about.html で想定）
+  // 既存のユーザー表示チップを検出（about.html は #headerUserChip）
   const candidate = document.querySelector(
-    '.header-user, .nav-user, .user-chip, #headerUser, .header-actions .user, .navbar .user'
+    '#headerUserChip, .header-user, .nav-user, .user-chip, #headerUser, .header-actions .user, .navbar .user'
   );
   if (candidate){
-    candidate.innerHTML = '<div id="currentUserIcon"></div>';
-    return candidate.firstElementChild;
+    const div = document.createElement('div');
+    div.id = 'currentUserIcon';
+
+    // a / button の内側に入れるとスタイルが崩れることがあるので、要素ごと安全に置換
+    if (candidate.parentNode) {
+      candidate.parentNode.replaceChild(div, candidate);
+    } else {
+      candidate.innerHTML = '';
+      candidate.appendChild(div);
+    }
+    return div;
   }
 
-  // ヘッダーの右側っぽい領域を見つけて最後に挿入
+  // ヘッダー領域に新規挿入（最終フォールバック）
   const header = document.querySelector(
     'header .header-actions, header .container, header, .topbar, .appbar'
   );
@@ -850,11 +859,12 @@ async function renderHeaderAvatarOnly(){
   return true;
 }
 /* 6) 要素待ち（最大 10 回 / 1 秒）— 重い全 DOM 監視はしない */
+// ▼ 置き換え：最大 10回 → 30回（~3秒）に増やす
 function waitAndRenderHeader(){
   let tries = 0;
   const tm = setInterval(async ()=>{
     tries++;
-    if (await renderHeaderAvatarOnly() || tries >= 10) clearInterval(tm);
+    if (await renderHeaderAvatarOnly() || tries >= 30) clearInterval(tm);
   }, 100);
 }
 
@@ -1114,10 +1124,10 @@ function renderFollowBoxesSafe(){
   tabFing.addEventListener('click',()=>activate('following'));
   activate('following');
 })();
-document.addEventListener('DOMContentLoaded', renderFollowBoxesSafe);
+ensureHeaderIconBox, renderFollowBoxesSafe);
 
 /* settings init */
-document.addEventListener('DOMContentLoaded', ()=>{
+ensureHeaderIconBox, ()=>{
   initProfileUI();
   renderMyPosts();
   document.getElementById('myPostsSearch')?.addEventListener('input', renderMyPosts);
@@ -1199,7 +1209,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 })();
 
 /* ================== Final sweep on DOMContentLoaded ================== */
-document.addEventListener('DOMContentLoaded', ()=>{
+ensureHeaderIconBox, ()=>{
   // 既に描画済みのカードにも保険でスキン＆＋を適用
   document.querySelectorAll('.card').forEach(card=>{
     const link=card.querySelector('a[href^="detail.html?id="]');
