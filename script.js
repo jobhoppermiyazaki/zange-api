@@ -766,39 +766,51 @@ async function _getHeaderAvatarInfo(){
   return { loggedIn:false };
 }
 
-// ▼ 置き換え：ヘッダー用アイコンコンテナの解決（about.html対応）
+// ▼ これに置き換え
 function _ensureHeaderIconBox(){
-  // 既定
+  // 既存があればそのまま使う
   let box = document.getElementById('currentUserIcon');
   if (box) return box;
 
-  // 既存のユーザー表示チップを検出（about.html は #headerUserChip）
-  const candidate = document.querySelector(
-    '#headerUserChip, .header-user, .nav-user, .user-chip, #headerUser, .header-actions .user, .navbar .user'
-  );
-  if (candidate){
-    const div = document.createElement('div');
-    div.id = 'currentUserIcon';
-
-    // a / button の内側に入れるとスタイルが崩れることがあるので、要素ごと安全に置換
-    if (candidate.parentNode) {
-      candidate.parentNode.replaceChild(div, candidate);
-    } else {
-      candidate.innerHTML = '';
-      candidate.appendChild(div);
+  // about.html は #headerUserChip の“中に”専用コンテナを足す（消さない）
+  const isAbout = location.pathname.endsWith('about.html');
+  if (isAbout) {
+    const chip = document.querySelector('#headerUserChip');
+    if (chip) {
+      box = chip.querySelector('#currentUserIcon');
+      if (!box) {
+        box = document.createElement('span');
+        box.id = 'currentUserIcon';
+        box.className = 'header-avatar-only';
+        chip.appendChild(box);               // ← innerHTML を消さない
+      }
+      return box;
     }
-    return div;
   }
 
-  // ヘッダー領域に新規挿入（最終フォールバック）
-  const header = document.querySelector(
-    'header .header-actions, header .container, header, .topbar, .appbar'
+  // その他ページ：既存のユーザー表示領域があれば、その“中に”追加（消さない）
+  const holder = document.querySelector(
+    '#headerUserChip, .header-user, .nav-user, .user-chip, #headerUser, .header-actions .user, .navbar .user'
   );
+  if (holder) {
+    box = holder.querySelector('#currentUserIcon');
+    if (!box) {
+      box = document.createElement('span');
+      box.id = 'currentUserIcon';
+      box.className = 'header-avatar-only';
+      holder.appendChild(box);               // ← 置換せず追加
+    }
+    return box;
+  }
+
+  // 最終フォールバック：ヘッダー末尾に追加
+  const header = document.querySelector('header .header-actions, header .container, header, .topbar, .appbar');
   if (header){
-    const div = document.createElement('div');
-    div.id = 'currentUserIcon';
-    header.appendChild(div);
-    return div;
+    box = document.createElement('span');
+    box.id = 'currentUserIcon';
+    box.className = 'header-avatar-only';
+    header.appendChild(box);
+    return box;
   }
   return null;
 }
@@ -1124,14 +1136,14 @@ function renderFollowBoxesSafe(){
   tabFing.addEventListener('click',()=>activate('following'));
   activate('following');
 })();
-ensureHeaderIconBox, renderFollowBoxesSafe);
+document.addEventListener('DOMContentLoaded', renderFollowBoxesSafe);
 
 /* settings init */
-ensureHeaderIconBox, ()=>{
+document.addEventListener('DOMContentLoaded', ()=>{
   initProfileUI();
   renderMyPosts();
   document.getElementById('myPostsSearch')?.addEventListener('input', renderMyPosts);
-  if(typeof renderFollowBoxesSafe==='function') renderFollowBoxesSafe();
+  if (typeof renderFollowBoxesSafe === 'function') renderFollowBoxesSafe();
 });
 
 /* ================== User page (user.html) ================== */
@@ -1209,7 +1221,7 @@ ensureHeaderIconBox, ()=>{
 })();
 
 /* ================== Final sweep on DOMContentLoaded ================== */
-ensureHeaderIconBox, ()=>{
+document.addEventListener('DOMContentLoaded', ()=>{
   // 既に描画済みのカードにも保険でスキン＆＋を適用
   document.querySelectorAll('.card').forEach(card=>{
     const link=card.querySelector('a[href^="detail.html?id="]');
