@@ -681,72 +681,89 @@ document.addEventListener("DOMContentLoaded", updateNotifBadge);
   updateNotifBadge();
 })();
 
-/* ================== Header current user icon ================== */
-(function showCurrentUser(){
-  // 優先順で探す（どれか1つあればOK）
-  const box =
-    document.getElementById("currentUserIcon") ||
-    document.getElementById("headerUserChip") ||
-    document.querySelector(".header-user");
-  if(!box) return;
+/* ================== Header current user icon (avatar-only) ================== */
+(function injectHeaderAvatarCssOnce(){
+  if (document.getElementById("headerAvatarCss")) return;
+  const css = `
+    .header-avatar-only{ padding:0 !important; background:transparent !important; border:none !important; box-shadow:none !important; }
+    .header-avatar-only img{ display:block; width:36px; height:36px; border-radius:50%; object-fit:cover; }
+    /* ヘッダー右端に高さがある場合の崩れ防止 */
+    .header-avatar-only{ display:inline-flex; align-items:center; justify-content:center; min-width:36px; min-height:36px; }
+  `.trim();
+  const style = document.createElement("style");
+  style.id = "headerAvatarCss";
+  style.textContent = css;
+  document.head.appendChild(style);
+})();
 
-  const me = getAuthUser();
-  const size = 36; // ヘッダー用に少し小さめ。必要なら 40～48 に調整可
-  box.innerHTML = "";
+function _resolveHeaderBox(){
+  // よくある候補をまとめて探索（存在するものを使用）
+  return document.querySelector(
+    "#currentUserIcon, #headerUserChip, .header-user, .user-chip, .user-pill, header .user, .nav .user"
+  );
+}
 
-  if (me) {
-    // 丸いアバター画像（投稿カードと同様の見た目）
+async function _getHeaderAvatarInfo(){
+  // 1) ローカル認証ユーザー
+  const meLocal = getAuthUser();
+  if (meLocal) {
+    return {
+      avatar: meLocal.profile?.avatar || "images/default-avatar.png",
+      title:  meLocal.profile?.nickname || meLocal.email || "ユーザー",
+      loggedIn: true
+    };
+  }
+  // 2) サーバー認証（/api/me）
+  const meServer = await fetchMe().catch(()=>null);
+  if (meServer && (meServer.email || meServer.nickname)) {
+    // settings で保存したプロフィール（per-user）を優先
+    const prof = getProfile();
+    return {
+      avatar: prof.avatar || "images/default-avatar.png",
+      title:  prof.nickname || meServer.nickname || meServer.email || "ユーザー",
+      loggedIn: true
+    };
+  }
+  // 3) 未ログイン
+  return { avatar:"", title:"", loggedIn:false };
+}
+
+async function renderHeaderAvatarOnly(){
+  const box = _resolveHeaderBox();
+  if (!box) return;
+
+  const info = await _getHeaderAvatarInfo();
+  box.innerHTML = "";                // 中身を pill からアイコン専用に
+  box.classList.add("header-avatar-only");
+  box.style.cursor = "pointer";
+
+  if (info.loggedIn) {
     const img = document.createElement("img");
-    img.src = me.profile?.avatar || "images/default-avatar.png";
-    img.alt = me.profile?.nickname || "ユーザー";
-    img.title = me.profile?.nickname || ""; // ホバーで名前が分かる
-    Object.assign(img.style, {
-      width: size + "px",
-      height: size + "px",
-      borderRadius: "50%",
-      objectFit: "cover",
-      display: "block"
-    });
+    img.src   = info.avatar || "images/default-avatar.png";
+    img.alt   = info.title || "ユーザー";
+    img.title = info.title || "";
     box.appendChild(img);
-    // pill 内のテキスト等があるレイアウトでも違和感が出ないように
-    box.style.padding = "0";
-    box.style.background = "transparent";
-    box.style.border = "none";
   } else {
-    // 未ログイン時はグレー丸
+    // 未ログイン丸
     const circle = document.createElement("div");
     Object.assign(circle.style, {
-      width: size + "px",
-      height: size + "px",
-      borderRadius: "50%",
-      background: "#ccc",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: "12px",
-      color: "#fff"
+      width:"36px", height:"36px", borderRadius:"50%",
+      background:"#ccc", color:"#fff",
+      display:"flex", alignItems:"center", justifyContent:"center",
+      fontSize:"12px"
     });
     circle.textContent = "未";
     box.appendChild(circle);
-    box.style.padding = "0";
-    box.style.background = "transparent";
-    box.style.border = "none";
   }
+}
 
-  // クリック用カーソル
-  box.style.cursor = "pointer";
-})();
+async function initAuthIconMenuAvatar(){
+  const box = _resolveHeaderBox();
+  if (!box) return;
 
-(function initAuthIconMenu(){
-  const box =
-    document.getElementById("currentUserIcon") ||
-    document.getElementById("headerUserChip") ||
-    document.querySelector(".header-user");
-  if(!box) return;
-
-  box.addEventListener("click", async ()=>{
-    const me = getAuthUser();
-    if (me) {
+  box.onclick = async () => {
+    const info = await _getHeaderAvatarInfo();
+    if (info.loggedIn) {
       if (confirm("ログアウトしますか？")) {
         await logoutUser();
         alert("ログアウトしました");
@@ -755,9 +772,14 @@ document.addEventListener("DOMContentLoaded", updateNotifBadge);
     } else {
       if (confirm("ログインしますか？")) location.href = "login.html";
     }
-  });
-})();
+  };
+}
 
+// 起動
+document.addEventListener("DOMContentLoaded", async ()=>{
+  await renderHeaderAvatarOnly();
+  await initAuthIconMenuAvatar();
+});
 /* ================== settings.html ================== */
 async function initProfileUI(){
   const view=document.getElementById("profileView");
