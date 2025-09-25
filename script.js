@@ -681,91 +681,91 @@ document.addEventListener("DOMContentLoaded", updateNotifBadge);
   updateNotifBadge();
 })();
 
-/* ================== Header current user icon (avatar-only) ================== */
+/* ================== Header avatar (robust, auto-rerender) ================== */
 (function injectHeaderAvatarCssOnce(){
   if (document.getElementById("headerAvatarCss")) return;
-  const css = `
-    .header-avatar-only{ padding:0 !important; background:transparent !important; border:none !important; box-shadow:none !important; }
-    .header-avatar-only img{ display:block; width:36px; height:36px; border-radius:50%; object-fit:cover; }
-    /* ヘッダー右端に高さがある場合の崩れ防止 */
-    .header-avatar-only{ display:inline-flex; align-items:center; justify-content:center; min-width:36px; min-height:36px; }
-  `.trim();
   const style = document.createElement("style");
   style.id = "headerAvatarCss";
-  style.textContent = css;
+  style.textContent = `
+    .header-avatar-only{ padding:0!important;background:transparent!important;border:none!important;box-shadow:none!important; }
+    .header-avatar-only{ display:inline-flex;align-items:center;justify-content:center;min-width:36px;min-height:36px; }
+    .header-avatar-only img{ display:block;width:36px;height:36px;border-radius:50%;object-fit:cover; }
+  `;
   document.head.appendChild(style);
 })();
 
+/* ヘッダーの候補を見つける（無ければ null を返す） */
 function _resolveHeaderBox(){
-  // よくある候補をまとめて探索（存在するものを使用）
   return document.querySelector(
     "#currentUserIcon, #headerUserChip, .header-user, .user-chip, .user-pill, header .user, .nav .user"
   );
 }
 
+/* 表示データを取得（ローカル > /api/me > 未ログイン） */
+let _meCache = null;              // /api/me の簡易キャッシュ（同一ページ内で乱発しない）
+let _meCacheAt = 0;
 async function _getHeaderAvatarInfo(){
-  // 1) ローカル認証ユーザー
-  const meLocal = getAuthUser();
+  // 1) ローカル認証
+  const meLocal = getAuthUser && getAuthUser();
   if (meLocal) {
     return {
       avatar: meLocal.profile?.avatar || "images/default-avatar.png",
-      title:  meLocal.profile?.nickname || meLocal.email || "ユーザー",
+      title : meLocal.profile?.nickname || meLocal.email || "ユーザー",
       loggedIn: true
     };
   }
-  // 2) サーバー認証（/api/me）
-  const meServer = await fetchMe().catch(()=>null);
-  if (meServer && (meServer.email || meServer.nickname)) {
-    // settings で保存したプロフィール（per-user）を優先
-    const prof = getProfile();
+  // 2) サーバー認証（最大10秒に1回だけ実呼び出し）
+  const now = Date.now();
+  if (!_meCache || now - _meCacheAt > 10000) {
+    try { _meCache = await (fetchMe && fetchMe()); _meCacheAt = now; } catch(e){ _meCache = null; }
+  }
+  if (_meCache && (_meCache.email || _meCache.nickname)) {
+    const p = (getProfile && getProfile()) || {};
     return {
-      avatar: prof.avatar || "images/default-avatar.png",
-      title:  prof.nickname || meServer.nickname || meServer.email || "ユーザー",
+      avatar: p.avatar || "images/default-avatar.png",
+      title : p.nickname || _meCache.nickname || _meCache.email || "ユーザー",
       loggedIn: true
     };
   }
   // 3) 未ログイン
-  return { avatar:"", title:"", loggedIn:false };
+  return { loggedIn:false };
 }
 
+/* 描画本体（安全な再描画） */
 async function renderHeaderAvatarOnly(){
   const box = _resolveHeaderBox();
-  if (!box) return;
+  if (!box) return false;
 
   const info = await _getHeaderAvatarInfo();
-  box.innerHTML = "";                // 中身を pill からアイコン専用に
+
+  // pill → 丸アイコンに差し替え
   box.classList.add("header-avatar-only");
-  box.style.cursor = "pointer";
+  while (box.firstChild) box.removeChild(box.firstChild);
 
   if (info.loggedIn) {
     const img = document.createElement("img");
-    img.src   = info.avatar || "images/default-avatar.png";
     img.alt   = info.title || "ユーザー";
     img.title = info.title || "";
+    img.src   = info.avatar || "images/default-avatar.png";
+    img.onerror = () => { img.src = "images/default-avatar.png"; };
     box.appendChild(img);
   } else {
-    // 未ログイン丸
     const circle = document.createElement("div");
     Object.assign(circle.style, {
-      width:"36px", height:"36px", borderRadius:"50%",
-      background:"#ccc", color:"#fff",
-      display:"flex", alignItems:"center", justifyContent:"center",
-      fontSize:"12px"
+      width:"36px",height:"36px",borderRadius:"50%",background:"#ccc",color:"#fff",
+      display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px"
     });
     circle.textContent = "未";
     box.appendChild(circle);
   }
-}
 
-async function initAuthIconMenuAvatar(){
-  const box = _resolveHeaderBox();
-  if (!box) return;
-
+  // クリック動作（既存仕様を踏襲）
+  box.style.cursor = "pointer";
   box.onclick = async () => {
-    const info = await _getHeaderAvatarInfo();
-    if (info.loggedIn) {
+    const state = await _getHeaderAvatarInfo();
+    if (state.loggedIn) {
       if (confirm("ログアウトしますか？")) {
-        await logoutUser();
+        await (logoutUser && logoutUser());
         alert("ログアウトしました");
         location.href = "login.html";
       }
@@ -773,12 +773,52 @@ async function initAuthIconMenuAvatar(){
       if (confirm("ログインしますか？")) location.href = "login.html";
     }
   };
+
+  return true;
 }
 
-// 起動
-document.addEventListener("DOMContentLoaded", async ()=>{
+/* 要素が出現するまで待ってから描画（最大2秒リトライ） */
+async function bootHeaderAvatar(){
+  const start = Date.now();
+  while (!_resolveHeaderBox() && Date.now() - start < 2000) {
+    await new Promise(r=>setTimeout(r, 50));
+  }
   await renderHeaderAvatarOnly();
-  await initAuthIconMenuAvatar();
+}
+
+/* DOM 変化でヘッダーが差し替わった場合も再描画 */
+(function observeHeader(){
+  const mo = new MutationObserver(async () => {
+    const ok = await renderHeaderAvatarOnly();
+    if (ok) return;
+  });
+  mo.observe(document.documentElement, { childList:true, subtree:true });
+})();
+
+/* 画面再表示/プロフ更新/他タブ変更でも再描画 */
+window.addEventListener("pageshow",  renderHeaderAvatarOnly);
+window.addEventListener("focus",     renderHeaderAvatarOnly);
+window.addEventListener("visibilitychange", ()=>{ if (!document.hidden) renderHeaderAvatarOnly(); });
+window.addEventListener("storage",   (e)=>{ if (e.key && e.key.startsWith("profile")) renderHeaderAvatarOnly(); });
+
+/* saveProfile をフックして再描画イベントを飛ばす（既存仕様は維持） */
+(function hookSaveProfile(){
+  if (window.__hookedSaveProfile) return;
+  window.__hookedSaveProfile = true;
+  const orig = window.saveProfile;
+  if (typeof orig === "function") {
+    window.saveProfile = function(p){
+      const r = orig.apply(this, arguments);
+      try{ renderHeaderAvatarOnly(); }catch(_){}
+      return r;
+    };
+  }
+})();
+
+/* 起動 */
+document.addEventListener("DOMContentLoaded", ()=>{
+  // 初回はフレーム後に実行（他スクリプトの描画が終わってから）
+  requestAnimationFrame(bootHeaderAvatar);
 });
 /* ================== settings.html ================== */
 async function initProfileUI(){
