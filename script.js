@@ -5,8 +5,22 @@ function saveZanges(z){ localStorage.setItem("zanges", JSON.stringify(z||[])); }
 function getParam(n){ const p=new URLSearchParams(location.search); return p.get(n); }
 
 /* ------------ Profile helpers ------------ */
-function getProfile(){ return JSON.parse(localStorage.getItem("profile")||"{}"); }
-function saveProfile(p){ localStorage.setItem("profile", JSON.stringify(p||{})); }
+function getProfile(){
+  // まずサーバーログインを参照（/api/me を使っている場合）
+  const sessionEmail = getActiveProfileOwner();
+  const key = _profileKeyFor(sessionEmail);
+  const fallback = localStorage.getItem("profile"); // 旧データ互換
+  const json = localStorage.getItem(key) || fallback;
+  return json ? JSON.parse(json) : {};
+}
+
+function saveProfile(p){
+  const sessionEmail = getActiveProfileOwner();
+  const key = _profileKeyFor(sessionEmail);
+  localStorage.setItem(key, JSON.stringify(p || {}));
+  // 互換のため旧キーも更新（古い画面で参照していても破綻しないように）
+  localStorage.setItem("profile", JSON.stringify(p || {}));
+}
 
 /* ------------ Auth / Users (localStorage) ------------ */
 function getUsers(){ return JSON.parse(localStorage.getItem("users")||"[]"); }
@@ -697,6 +711,10 @@ function initProfileUI(){
   const edit=document.getElementById("profileEdit");
   if(!view || !edit) return;
 
+// ★ ここを追加：現在ログインのユーザーにプロファイルの所有者を同期
+  const me = await fetchMe().catch(()=>null);
+  if (me && me.email) setActiveProfileOwner(me.email);
+  
   function renderProfileView(p){
     const a=document.getElementById("profileAvatarShow"),
           n=document.getElementById("profileNameShow"),
@@ -990,7 +1008,22 @@ async function registerUser(email, pass, { nickname = "" } = {}) {
     body: JSON.stringify({ email, password: pass, nickname })
   });
   const data = await res.json().catch(() => ({}));
-  return !!(res.ok && data.ok);
+  if (res.ok && data.ok && data.user) {
+    setActiveProfileOwner(data.user.email);
+    // プロフィール初期化（無ければ）
+    const existed = getProfile();
+    if (!existed || Object.keys(existed).length === 0) {
+      saveProfile({
+        nickname: data.user.nickname || data.user.email || "匿名",
+        avatar: "images/default-avatar.png",
+        gender: "",
+        age: "",
+        bio: ""
+      });
+    }
+    return true;
+  }
+  return false;
 }
 
 async function loginUser(email, pass) {
@@ -1001,16 +1034,50 @@ async function loginUser(email, pass) {
     body: JSON.stringify({ email, password: pass })
   });
   const data = await res.json().catch(() => ({}));
-  return !!(res.ok && data.ok);
+  if (res.ok && data.ok && data.user) {
+    setActiveProfileOwner(data.user.email);
+    // 既存プロフが無ければ最低限を用意
+    const prof = getProfile();
+    if (!prof || Object.keys(prof).length === 0) {
+      saveProfile({
+        nickname: data.user.nickname || data.user.email || "匿名",
+        avatar: "images/default-avatar.png",
+        gender: "",
+        age: "",
+        bio: ""
+      });
+    }
+    return true;
+  }
+  return false;
 }
 
 async function logoutUser() {
   await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
+  // アクティブオーナーを解除（次回は旧互換の "profile" を参照）
+  setActiveProfileOwner("");
   return true;
 }
 
 async function fetchMe() {
   const res = await fetch("/api/me", { credentials: "same-origin", cache: "no-store" });
   const data = await res.json().catch(() => ({}));
-  return data && data.ok ? data.user : null;
+  if (data && data.ok && data.user) {
+    // /api/me ベースでオーナーを同期させる（タブ再読込時など）
+    setActiveProfileOwner(data.user.email || "");
+    return data.user;
+  }
+  return null;
+}
+
+/* ====== Per-user Profile namespace (fix for settings page) ====== */
+function _profileKeyFor(email){
+  const e = (email || "").trim().toLowerCase();
+  return e ? `profile:${e}` : "profile";
+}
+function setActiveProfileOwner(email){
+  localStorage.setItem("profile_owner", (email || "").trim().toLowerCase());
+}
+function getActiveProfileOwner(){
+  return (localStorage.getItem("profile_owner") || "").trim().toLowerCase();
 }
