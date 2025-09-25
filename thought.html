@@ -30,13 +30,17 @@
   </style>
 </head>
 <body>
-  <!-- 共通ヘッダー -->
-  <header>
-    <div style="display:flex; align-items:center; justify-content:space-between;">
-      <h1><a href="index.html" style="text-decoration:none; color:inherit;">zange</a></h1>
-      <span id="currentUserIcon"></span>
+ <header class="site-header">
+  <div class="inner">
+    <div class="h-left">
+      <a class="logo" href="index.html">zange</a>
     </div>
-  </header>
+    <div class="h-right">
+      <!-- ← これだけあればOK（script.js側が丸アイコンを描画） -->
+      <div id="currentUserIcon" class="user-ico"></div>
+    </div>
+  </div>
+</header>
 
   <!-- ページ見出し -->
   <header class="hero-subbar">
@@ -127,5 +131,13 @@
   </script>
 
   <footer>&copy; 2025 zange (テスト公開中)</footer>
+
+<script src="script.js"></script>
+<script>
+  if (typeof renderHeaderAvatarOnly === 'function') {
+    renderHeaderAvatarOnly(); // 即時1回描画（待機を待たない）
+  }
+</script>
+  
 </body>
 </html>
