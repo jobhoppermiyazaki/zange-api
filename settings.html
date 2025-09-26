@@ -6,20 +6,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <link rel="stylesheet" href="style.css" />
 
-  <!-- Render の同一オリジン API を最優先に使う -->
   <script>
+    /* Render の同一オリジン API を最優先に使う（既存） */
     window.ZANGE_API_BASE = location.origin.replace(/\/+$/, '') + '/api/posts';
   </script>
 
   <style>
-    /* --- Settings page quick styles --- */
     .section-title{font-weight:800;font-size:18px;margin:8px 0 6px;}
     .card.form{padding:14px}
     .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-    .avatar{
-      width:84px;height:84px;border-radius:50%;object-fit:cover;border:2px solid var(--panel-border,#eee);
-      background:#f6f6f6;display:block
-    }
+    .avatar{width:84px;height:84px;border-radius:50%;object-fit:cover;border:2px solid var(--panel-border,#eee);background:#f6f6f6;display:block}
     .avatar-wrap{display:flex;flex-direction:column;gap:6px;align-items:center}
     .field{display:flex;flex-direction:column;gap:6px;flex:1;min-width:140px}
     .field input[type="text"], .field input[type="number"], .field textarea, .field select{width:100%}
@@ -30,27 +26,15 @@
     .right{margin-left:auto}
     .muted{color:#8a8a8a}
     .pill{padding:6px 10px;border-radius:999px;background:#f1f5f9}
-
     .my-post .edit-area{margin-top:8px;display:none !important;}
     .my-post.editing .edit-area{display:block !important;}
-
     #profileView p{margin:2px 0}
     #profileView .name{font-weight:700;font-size:16px}
     #profileView .meta{font-size:13px;color:#6b7280}
     #profileView .bio{margin-top:4px}
-
-    .follow-posts-modal{
-      position:fixed; inset:0; display:none; z-index:9999;
-      background:rgba(0,0,0,.35); padding:16px;
-      align-items:flex-end; justify-content:center;
-    }
-    .follow-posts-modal .sheet{
-      width:100%; max-width:720px; max-height:80vh; overflow:auto;
-      background:#fff; border-radius:16px; padding:12px; box-shadow:0 10px 30px rgba(0,0,0,.25);
-    }
-    .follow-posts-modal .sheet .head{
-      display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;
-    }
+    .follow-posts-modal{position:fixed; inset:0; display:none; z-index:9999; background:rgba(0,0,0,.35); padding:16px; align-items:flex-end; justify-content:center;}
+    .follow-posts-modal .sheet{width:100%; max-width:720px; max-height:80vh; overflow:auto; background:#fff; border-radius:16px; padding:12px; box-shadow:0 10px 30px rgba(0,0,0,.25);}
+    .follow-posts-modal .sheet .head{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;}
     .follow-posts-modal .close-btn{ padding:8px 12px; border:1px solid #eee; border-radius:10px; background:#fff; }
     .follow-link{ border:none; background:none; padding:0; font:inherit; color:inherit; text-align:left; cursor:pointer; }
   </style>
@@ -64,13 +48,14 @@
   </header>
 
   <main style="padding-bottom:90px">
-    <!-- 自分のプロフィール -->
+    <!-- 自分のプロフィール（表示モード＋編集モード） -->
     <div class="card form">
       <!-- 表示モード -->
       <div id="profileView">
         <div class="row">
           <div class="avatar-wrap">
-            <img id="profileAvatarShow" class="avatar" src="images/default-avatar.png" alt="avatar">
+            <img id="profileAvatarShow" class="avatar" src="images/default-avatar.png" alt="avatar"
+                 onerror="this.onerror=null;this.src='images/default-avatar.png';">
           </div>
           <div class="field" style="min-width:180px;flex:2">
             <p id="profileNameShow" class="name">匿名</p>
@@ -84,9 +69,49 @@
         </div>
       </div>
 
-      <!-- 編集モード -->
+      <!-- 編集モード（初期は非表示） -->
       <div id="profileEdit" style="display:none;">
-        <!-- ...（省略：既存編集UIはそのまま）... -->
+        <div class="row">
+          <div class="avatar-wrap">
+            <img id="profileAvatarPreview" class="avatar" src="images/default-avatar.png" alt="avatar"
+                 onerror="this.onerror=null;this.src='images/default-avatar.png';">
+            <label class="btn">
+              プロフィール画像設定
+              <input id="profileAvatarInput" type="file" accept="image/*" style="display:none">
+            </label>
+          </div>
+          <div class="field">
+            <label>ニックネーム</label>
+            <input id="profileNickname" type="text" placeholder="例）zange太郎">
+          </div>
+          <div class="field" style="max-width:140px">
+            <label>性別</label>
+            <select id="profileGender">
+              <option value="">未選択</option>
+              <option>男性</option>
+              <option>女性</option>
+              <option>その他</option>
+              <option>回答しない</option>
+            </select>
+          </div>
+          <div class="field" style="max-width:140px">
+            <label>年齢</label>
+            <select id="profileAge">
+              <option value="">未選択</option>
+              <option>〜19</option><option>20-24</option><option>25-29</option>
+              <option>30-34</option><option>35-39</option><option>40-44</option>
+              <option>45-49</option><option>50-59</option><option>60+</option>
+            </select>
+          </div>
+          <div class="field" style="flex-basis:100%">
+            <label>プロフィール</label>
+            <textarea id="profileBio" rows="3" placeholder="ひとこと自己紹介"></textarea>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button id="profileSaveBtn" class="btn primary">保存</button>
+          <button id="profileCancelBtn" class="btn">キャンセル</button>
+        </div>
       </div>
     </div>
 
@@ -113,37 +138,22 @@
       </div>
     </section>
 
-    <!-- フォロー中ユーザーの投稿一覧モーダル -->
-    <div id="followPostsModal" class="follow-posts-modal">
-      <div class="sheet card">
-        <div class="head">
-          <strong id="followPostsTitle">ユーザーの投稿</strong>
-          <button id="followPostsClose" class="close-btn">閉じる</button>
-        </div>
-        <div id="followPostsList"></div>
-      </div>
-    </div>
-
     <!-- 自分の投稿 -->
     <div class="card form" style="margin-top:16px">
       <div class="section-title">自分の投稿</div>
       <div class="my-posts-toolbar">
-        <input id="myPostsSearch"
-               type="search"
-               inputmode="search"
-               placeholder="自分の投稿を検索（本文・対象・タグ）">
+        <input id="myPostsSearch" type="search" inputmode="search" placeholder="自分の投稿を検索（本文・対象・タグ）">
       </div>
       <div id="myPostsList"></div>
     </div>
   </main>
 
-  <!-- 共通フッター -->
   <footer class="mobile-tabbar">
     <nav>
       <a href="index.html"><span class="icon">🏠</span><span class="label">ホーム</span></a>
       <a href="topics.html"><span class="icon">🎯</span><span class="label">お題</span></a>
       <a href="notifications.html" class="nav-link nav-bell">
-        <span class="icon-row"><span class="icon">🔔</span><span id="notifBadge" class="notif-badge"></span></span>
+        <span class="icon-row"><span class="icon">🔔</span><span id="notifBadge" class="notif-badge" aria-label="未読通知数"></span></span>
         <span class="label">通知</span>
       </a>
       <a href="settings.html"><span class="icon">⚙️</span><span class="label">設定</span></a>
@@ -152,9 +162,10 @@
   </footer>
   <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
 
+  <!-- 既存ロジック（users/following/Followers を管理） -->
   <script src="script.js"></script>
 
-  <!-- ▼ ヘッダー右上：ログイン状態表示 ＋ フォロー中一覧描画 ▼ -->
+  <!-- ページ固有の最小 JS：ログイン表示 & フォロー一覧の再描画だけ -->
   <script>
     async function renderUserIcon(){
       const box = document.getElementById("currentUserIcon");
@@ -165,15 +176,7 @@
         if (data.ok && data.user){
           const esc = s => (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m]));
           const name = data.user.nickname || data.user.email;
-          box.innerHTML = `
-            <span style="display:inline-flex;align-items:center;gap:8px;">
-              <span class="pill">👤 ${esc(name)}</span>
-              <button id="logoutBtn" class="btn">ログアウト</button>
-            </span>`;
-          document.getElementById("logoutBtn")?.addEventListener("click", async()=>{
-            await fetch("/api/logout",{ method:"POST", credentials:"include" });
-            location.reload();
-          });
+          box.innerHTML = `<span class="pill">👤 ${esc(name)}</span>`;
         }else{
           box.innerHTML = `<a href="login.html">ログイン</a>`;
         }
@@ -182,34 +185,16 @@
       }
     }
 
-    function getFollowMap(){
-      try{ return JSON.parse(localStorage.getItem('followees')||'{}'); }
-      catch(_){ return {}; }
-    }
-
-    function renderFollowingList(){
-      const box=document.getElementById('followingList');
-      if(!box) return;
-      const map=getFollowMap();
-      const names=Object.keys(map).filter(k=>map[k]);
-      if(!names.length){
-        box.innerHTML='<div class="muted">フォロー中のユーザーはいません。</div>';
-        return;
-      }
-      const ul=document.createElement('ul');
-      ul.style.listStyle='none'; ul.style.padding='0';
-      names.forEach(name=>{
-        const li=document.createElement('li');
-        li.innerHTML=`<a href="user.html?name=${encodeURIComponent(name)}" style="text-decoration:none;color:#2563eb;font-weight:600">${name}</a>`;
-        ul.appendChild(li);
-      });
-      box.innerHTML=''; box.appendChild(ul);
-    }
-
-    document.addEventListener("DOMContentLoaded", ()=>{
+    document.addEventListener("DOMContentLoaded", () => {
       renderUserIcon();
-      renderFollowingList();
+
+      /* ここがポイント：script.js の正式実装を利用して描画 */
+      if (typeof renderFollowBoxesSafe === "function") {
+        renderFollowBoxesSafe();
+      }
     });
+
+    /* タブ切替は script.js の initFollowTabs が面倒を見ます */
   </script>
 
   <footer>&copy; 2025 zange (テスト公開中)</footer>
