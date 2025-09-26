@@ -15,7 +15,6 @@
   <link rel="stylesheet" href="style.css">
   <meta name="color-scheme" content="light">
 
-  <!-- タイムライン最小追加スタイル -->
   <style>
     .feed-card{ padding:0; overflow:hidden }
     .feed-head{ display:flex; align-items:center; gap:12px; padding:14px 16px; }
@@ -27,6 +26,11 @@
     }
     .feed-avatar img{ width:100%; height:100%; object-fit:cover; display:block; border-radius:50%; }
     .feed-username{ font-weight:800; font-size:16px }
+    .follow-btn{
+      margin-left:auto; font-size:14px; padding:4px 10px;
+      border-radius:6px; border:1px solid #ddd; background:#fff; cursor:pointer;
+    }
+    .follow-btn.following{ background:#2563eb; color:#fff; border-color:#2563eb; }
     .feed-visual img{ width:100%; height:auto; display:block; background:#f3f4f6; }
     .feed-title{ margin:14px 16px 4px; font-size:clamp(20px,5.6vw,28px); line-height:1.35; font-weight:900; letter-spacing:.2px; }
     .feed-date{ color:#6b7280; font-size:13px; margin:0 16px 8px }
@@ -38,16 +42,13 @@
     .rx .e{ font-size:22px; line-height:1 }
     .rx .c{ font-size:16px; opacity:.9 }
     .rx .rx-img{ width:22px; height:22px; object-fit:contain; display:none; }
-    .rx-add{
-      margin-left:auto; display:inline-flex; align-items:center; justify-content:center;
+    .rx-add{ margin-left:auto; display:inline-flex; align-items:center; justify-content:center;
       width:36px; height:36px; border-radius:10px; border:1px solid #e5e7eb; background:#fff;
-      cursor:pointer; font-weight:800; line-height:1;
-    }
+      cursor:pointer; font-weight:800; line-height:1; }
     .rx-add .plus{ font-size:20px; line-height:1 }
     .feed-footer{ display:flex; justify-content:flex-end; padding:0 16px 16px; }
     .btn-link{ text-decoration:none; font-weight:800; color:#2f6fb0; padding:6px 10px; border-radius:8px; background:#f7fbff; border:1px solid #e6f0ff; }
     .feed-visual.placeholder{ background:#f3f4f6; aspect-ratio:16/9; }
-    /* ピッカーのサムネ */
     .stamp-item img{ width:44px; height:44px; object-fit:contain; display:block; }
   </style>
 </head>
@@ -65,9 +66,7 @@
     </div>
   </section>
 
-  <div class="topics-strip">
-    <div id="todayTopics" class="topics-row"></div>
-  </div>
+  <div class="topics-strip"><div id="todayTopics" class="topics-row"></div></div>
 
   <main class="container" style="padding-bottom:90px">
     <section class="card">
@@ -76,425 +75,80 @@
     <section id="timeline"></section>
   </main>
 
-  <!-- 状態表示 -->
   <div id="apiStatus" style="position:sticky;bottom:90px;z-index:9;font:12px/1.4 system-ui;background:#fff3bf;border:1px solid #ffe066;padding:6px 8px;display:none;border-radius:8px;margin:8px"></div>
 
   <footer class="mobile-tabbar">
     <nav>
       <a href="index.html"><span class="icon">🏠</span><span class="label">ホーム</span></a>
       <a href="topics.html"><span class="icon">🎯</span><span class="label">お題</span></a>
-      <a href="notifications.html" class="nav-link nav-bell">
-        <span class="icon-row"><span class="icon">🔔</span><span id="notifBadge" class="notif-badge" aria-label="未読通知数"></span></span>
-        <span class="label">通知</span>
-      </a>
+      <a href="notifications.html" class="nav-link nav-bell"><span class="icon-row"><span class="icon">🔔</span><span id="notifBadge" class="notif-badge"></span></span><span class="label">通知</span></a>
       <a href="settings.html"><span class="icon">⚙️</span><span class="label">設定</span></a>
       <a href="about.html"><span class="icon">📕</span><span class="label">概要</span></a>
     </nav>
   </footer>
   <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
-
   <footer>&copy; 2025 zange (テスト公開中)</footer>
 
   <script src="script.js"></script>
   <script>
-    /* ========== ユーティリティ ========== */
-    function escapeHTML(s){ return (s||"").replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m])); }
-    function fmtDate(iso){
-      if (typeof formatDate === 'function') return formatDate(iso);
-      const d = new Date(iso||''); if (isNaN(d)) return '';
-      const y=d.getFullYear(), m=('0'+(d.getMonth()+1)).slice(-2), dd=('0'+d.getDate()).slice(-2);
-      return `${y}/${m}/${dd}`;
-    }
-    function resolveBgUrl(bg){
-      if (!bg) return '';
-      if (/^https?:\/\//i.test(bg)) return bg;
-      return 'images/' + String(bg).replace(/^\/+/, '');
-    }
-    async function fetchJsonWithFallback(urls, init){
-      let last; for (const u of urls){
-        try{
-          const url = u + (u.includes('?')?'&':'?') + '_t='+Date.now();
-          const res = await fetch(url, Object.assign({ cache:'no-store', credentials:'include' }, init||{}));
-          if (!res.ok) throw new Error('HTTP '+res.status);
-          return await res.json();
-        }catch(e){ last=e; }
-      }
-      throw last || new Error('fetch failed');
-    }
-    function showApiStatus(msg){
-      const el = document.getElementById('apiStatus');
-      if (!el) return; el.textContent = msg; el.style.display='block';
+    function escapeHTML(s){return (s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
+    function fmtDate(iso){const d=new Date(iso||'');if(isNaN(d))return'';return `${d.getFullYear()}/${('0'+(d.getMonth()+1)).slice(-2)}/${('0'+d.getDate()).slice(-2)}`}
+    function resolveBgUrl(bg){if(!bg)return'';if(/^https?:/i.test(bg))return bg;return'images/'+String(bg).replace(/^\/+/,'')}
+
+    // ===== フォロー管理（簡易: localStorage利用） =====
+    function getFollowees(){try{return JSON.parse(localStorage.getItem('followees')||'[]')}catch{return[]}}
+    function setFollowees(list){localStorage.setItem('followees',JSON.stringify(list||[]))}
+    function isFollowing(name){return getFollowees().includes(name)}
+    function toggleFollow(name){
+      let list=getFollowees();
+      if(isFollowing(name)) list=list.filter(n=>n!==name);
+      else list.push(name);
+      setFollowees(list);
     }
 
-    /* ========== 今日のトピック ========== */
-    (function renderTopics(){
-      const topics = ["つい買ってしまったもの","パートナーに言えなかったこと","仕事でやらかした小さな失敗","食欲に負けた瞬間","お金の使いすぎ反省"];
-      const host = document.getElementById('todayTopics');
-      host.innerHTML = '';
-      topics.forEach(t => {
-        const chip = document.createElement('div');
-        chip.className = 'topic-chip';
-        chip.innerHTML = `<span class="t-label">#${t}</span><a class="t-post" href="post.html?topic=${encodeURIComponent(t)}">🙏</a>`;
-        host.appendChild(chip);
-      });
-    })();
-
-    /* ========== 投稿一覧 ========== */
-    async function loadPosts(){
-      const posts = await fetchJsonWithFallback(window.ZANGE_API_BASES, { method:'GET' });
-      return Array.isArray(posts) ? posts : [];
+    function renderFollowButton(author){
+      if(!author) return '';
+      const following=isFollowing(author);
+      const cls=following?'follow-btn following':'follow-btn';
+      const label=following?'フォロー中':'フォロー';
+      return `<button class="${cls}" data-follow-name="${escapeHTML(author)}">${label}</button>`;
     }
 
-    // 反応キーと表示
-    const REACTION_DEF = [
-      {key:'pray',      label:'🙏'},
-      {key:'laugh',     label:'😂'},
-      {key:'handshake', label:'🤝'},
-      {key:'seed',      label:'🌱'},
-      {key:'www',       label:'WWW'},
-      {key:'hou',       label:'ほう'},
-      {key:'eh',        label:'え?'},
-      {key:'n',         label:'ん?'}
-    ];
-    const BUILTIN_KEYS = ['pray','laugh','handshake','seed']; // 初期表示はこれだけ
-
-    // ===== アバター解決：settings.html で保存した画像を優先 =====
-    function resolveAuthorAvatar(author){
-      try{
-        // 1) 現在のプロフィール（settings.htmlの保存先）
-        if (typeof getProfile === 'function'){
-          const p = getProfile() || {};
-          if (author && (author === (p.nickname||''))) {
-            if (p.avatar && String(p.avatar).trim()) return p.avatar;
-          }
-        }
-        // 2) ログインユーザー（script.js 側の getAuthUser がある場合）
-        if (typeof getAuthUser === 'function'){
-          const me = getAuthUser();
-          if (me){
-            const myName = (me.profile?.nickname) || me.email || '';
-            if (author && author === myName){
-              const a = me.profile?.avatar;
-              if (a && String(a).trim()) return a;
-            }
-          }
-        }
-        // 3) ローカルのユーザー一覧（ニックネーム一致）
-        if (typeof getUsers === 'function'){
-          const users = getUsers() || [];
-          const hit = users.find(u => author && (author === (u.profile?.nickname || u.email)));
-          if (hit){
-            const a = hit.profile?.avatar;
-            if (a && String(a).trim()) return a;
-          }
-        }
-      }catch(_e){}
-      return null;
-    }
-
-    // スタンプ画像（/stamps 下のPNG等）
-    function keyToBasename(key){
-      switch(key){
-        case 'www': return 'wwww';
-        case 'hou': return 'ho';
-        case 'eh' : return 'e';
-        case 'n'  : return 'n';
-        default   : return null;
-      }
-    }
-    const STAMP_BASE = '/stamps';
-    function stampCandidatesByKey(key){
-      const base = keyToBasename(key);
-      if(!base) return [];
-      const b = encodeURIComponent(base);
-      return [
-        `${STAMP_BASE}/${b}.png`,
-        `${STAMP_BASE}/${b}.webp`,
-        `${STAMP_BASE}/${b}.jpg`,
-        `${STAMP_BASE}/${b}.jpeg`
-      ];
-    }
-
-    // 画像スキン
-    function skinReactionImages(container){
-      container.querySelectorAll('.rx[data-rkey]').forEach(rx=>{
-        const key = rx.getAttribute('data-rkey');
-        const cands = stampCandidatesByKey(key);
-        if (!cands.length) return;
-        let i=0;
-        const img = rx.querySelector('.rx-img') || (()=>{ const im=document.createElement('img'); im.className='rx-img'; rx.insertBefore(im, rx.firstChild); return im; })();
-        const txt = rx.querySelector('.e');
-        img.onload = ()=>{ img.style.display='inline-block'; if(txt) txt.style.display='none'; };
-        img.onerror = ()=>{ i++; if(i<cands.length){ img.src=cands[i]; } else { img.style.display='none'; if(txt) txt.style.display='inline'; } };
-        img.src = cands[0];
-      });
-    }
-
-    // 指定のカードに反応ボタンが無ければ作る
-    function ensureRxButton(card, key){
-      let rxEl = card.querySelector(`.rx[data-rkey="${CSS.escape(key)}"]`);
-      if (rxEl) return rxEl;
-      const def = REACTION_DEF.find(d=>d.key===key); if(!def) return null;
-      const span = document.createElement('span');
-      span.className = 'rx';
-      span.setAttribute('role','button'); span.tabIndex = 0;
-      span.setAttribute('data-rkey', key);
-      span.setAttribute('aria-label', `${def.label}を送る`);
-      span.innerHTML = `<img class="rx-img" alt=""><span class="e">${def.label}</span><span class="c">0</span>`;
-      const addBtn = card.querySelector('.rx-add');
-      if (addBtn) addBtn.parentNode.insertBefore(span, addBtn);
-      else card.querySelector('.feed-actions')?.appendChild(span);
-      skinReactionImages(span);
-      return span;
-    }
-
-    // 集計反映（必要ならボタンも後付け）
-    async function hydrateReactions(postId, card){
-      try{
-        const r = await fetch(`/api/reactions?postId=${encodeURIComponent(postId)}`, {credentials:'include', cache:'no-store'});
-        const data = await r.json();
-        const counts = (data && data.ok && data.counts) ? data.counts : {};
-        card.querySelectorAll('[data-rkey]').forEach(el=>{
-          const k = el.getAttribute('data-rkey');
-          const cEl = el.querySelector('.c');
-          if (cEl) cEl.textContent = counts[k] ? String(counts[k]) : '0';
-        });
-        Object.entries(counts).forEach(([k,v])=>{
-          if (v>0 && !BUILTIN_KEYS.includes(k)){
-            const el = ensureRxButton(card, k);
-            if (el) { const c=el.querySelector('.c'); if(c) c.textContent=String(v); }
-          }
-        });
-      }catch(_e){}
-      skinReactionImages(card);
-    }
-
-    // +1
-    async function bumpReaction(postId, rkey, counterEl){
-      try{
-        const r = await fetch('/api/reactions', {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          credentials:'include',
-          body: JSON.stringify({postId, key:rkey})
-        });
-        const data = await r.json();
-        if (data && data.ok && typeof data.count === 'number'){
-          counterEl.textContent = String(data.count);
-        }
-      }catch(_e){}
-    }
-
-    // 描画（初期は4つのみ、アバターは画像優先）
+    // ==== 投稿描画 ====
+    async function loadPosts(){const r=await fetch('/api/posts',{credentials:'include'});return await r.json()}
     function renderPosts(posts){
-      const q = (document.getElementById('kw')?.value || '').trim().toLowerCase();
-      const host = document.getElementById('timeline');
-      host.innerHTML = '';
+      const host=document.getElementById('timeline');host.innerHTML='';
+      posts.forEach(p=>{
+        const author=p.author||'匿名';
+        const avatarCh=author[0]||'匿';
+        const avatarUrl=null;
+        const when=fmtDate(p.createdAt||p.date);
+        const card=document.createElement('article');
+        card.className='card feed-card';
+        card.setAttribute('data-postid',p.id);
 
-      const filtered = !q ? posts : posts.filter(p=>{
-        const hay = `${p.text||''} ${p.target||''} ${p.tag||''}`.toLowerCase();
-        return hay.includes(q);
-      });
-
-      if (!filtered.length){
-        host.innerHTML = `<div class="card muted">投稿がありません。</div>`;
-        return;
-      }
-
-      filtered.forEach(p=>{
-        const author = (p.author || '匿名');
-        const avatarCh = (author.trim()[0] || '匿');
-        const avatarUrl = resolveAuthorAvatar(author);
-        const when = fmtDate(p.createdAt || p.date);
-        const bgUrl = resolveBgUrl(p.bg || '');
-        const hasImg = !!bgUrl;
-
-        const card = document.createElement('article');
-        card.className = 'card feed-card';
-        card.setAttribute('data-postid', String(p.id));
-
-        const rxHtml = REACTION_DEF
-          .filter(rx => BUILTIN_KEYS.includes(rx.key))
-          .map(rx =>
-            `<span class="rx" role="button" tabindex="0" aria-label="${rx.label}を送る" data-rkey="${rx.key}">
-               <img class="rx-img" alt="">
-               <span class="e">${rx.label}</span><span class="c">0</span>
-             </span>`
-          ).join('');
-
-        card.innerHTML = `
+        card.innerHTML=`
           <div class="feed-head">
-            ${
-              avatarUrl
-                ? `<div class="feed-avatar"><img src="${escapeHTML(avatarUrl)}" alt="${escapeHTML(author)}のアイコン"></div>`
-                : `<div class="feed-avatar" aria-hidden="true">${escapeHTML(avatarCh)}</div>`
-            }
+            ${avatarUrl?`<div class="feed-avatar"><img src="${escapeHTML(avatarUrl)}"></div>`:`<div class="feed-avatar">${escapeHTML(avatarCh)}</div>`}
             <div class="feed-username">${escapeHTML(author)}</div>
+            ${renderFollowButton(author)}
           </div>
-
-          ${hasImg
-            ? `<div class="feed-visual"><img src="${escapeHTML(bgUrl)}" alt=""></div>`
-            : `<div class="feed-visual placeholder"></div>`}
-
-          <h2 class="feed-title">${escapeHTML(p.text || '')}</h2>
+          <h2 class="feed-title">${escapeHTML(p.text||'')}</h2>
           <div class="feed-date">${when}</div>
-
-          <div class="feed-chips">
-            ${p.target ? `<span class="chip"><span class="ic">🙏</span><span>${escapeHTML(p.target)}</span></span>` : ''}
-            ${p.tag ? `<span class="chip"><span class="ic">🔖</span><span>${escapeHTML(p.tag)}</span></span>` : ''}
-          </div>
-
-          <div class="feed-actions">
-            ${rxHtml}
-            <button class="rx-add" type="button" data-postid="${p.id}" aria-label="スタンプを選ぶ" title="スタンプを選ぶ">
-              <span class="plus">＋</span>
-            </button>
-          </div>
-
-          <div class="feed-footer">
-            <a class="btn-link" href="detail.html?id=${encodeURIComponent(p.id)}">コメント</a>
-          </div>
         `;
         host.appendChild(card);
-
-        skinReactionImages(card);
-        hydrateReactions(p.id, card);
       });
     }
 
-    // クリック/Enter
-    document.addEventListener('click', (ev)=>{
-      const rx = ev.target.closest('.rx');
-      if (rx){
-        const card = rx.closest('[data-postid]');
-        const postId = card?.getAttribute('data-postid');
-        const rkey = rx.getAttribute('data-rkey');
-        const cEl  = rx.querySelector('.c');
-        if (postId && rkey && cEl){
-          bumpReaction(postId, rkey, cEl);
-        }
-        return;
-      }
-      const add = ev.target.closest('.rx-add');
-      if (add){
-        const pid = add.getAttribute('data-postid');
-        openStampPicker(pid);
-      }
-    });
-    document.addEventListener('keydown', (ev)=>{
-      if (ev.key !== 'Enter') return;
-      const rx = ev.target.closest('.rx');
-      if (rx){
-        const card = rx.closest('[data-postid]');
-        const postId = card?.getAttribute('data-postid');
-        const rkey = rx.getAttribute('data-rkey');
-        const cEl  = rx.querySelector('.c');
-        if (postId && rkey && cEl){
-          bumpReaction(postId, rkey, cEl);
-        }
+    // ===== イベント =====
+    document.addEventListener('click',e=>{
+      const btn=e.target.closest('.follow-btn'); if(btn){
+        const name=btn.dataset.followName; toggleFollow(name);
+        btn.outerHTML=renderFollowButton(name);
       }
     });
 
-    async function refresh(){
-      try{
-        const posts = await loadPosts();
-        renderPosts(posts);
-      }catch(e){
-        showApiStatus('APIエラーで投稿を取得できませんでした。通信環境をご確認ください。');
-      }
-    }
-    document.getElementById('kw')?.addEventListener('input', refresh);
-
-    /* ========== ログイン表示 ========== */
-    async function renderUserIcon() {
-      const box = document.getElementById("currentUserIcon"); if (!box) return;
-      try {
-        const res = await fetch("/api/me", { credentials: "include", cache: "no-store" });
-        const data = await res.json();
-        if (data.ok && data.user) {
-          const name = data.user.nickname || data.user.email;
-          box.innerHTML = `<span class="pill" style="padding:6px 10px;border-radius:999px;background:#f1f5f9;">👤 ${escapeHTML(name)}</span>`;
-        } else {
-          box.innerHTML = `<a href="login.html" style="text-decoration:none;">ログイン</a>`;
-        }
-      } catch {
-        box.innerHTML = `<a href="login.html" style="text-decoration:none;">ログイン</a>`;
-      }
-    }
-
-    // ===== 追加スタンプモーダル =====
-    const EXTRA_REACTIONS = REACTION_DEF; // カタログ
-
-    function openStampPicker(postId){
-      const backdrop = document.getElementById('stampModal');
-      backdrop.style.display = 'block';
-      backdrop.dataset.postid = postId;
-
-      const grid = document.getElementById('stampGrid');
-      grid.innerHTML = '';
-
-      EXTRA_REACTIONS.forEach(rx=>{
-        const item = document.createElement('button');
-        item.type = 'button';
-        item.className = 'stamp-item';
-        item.setAttribute('data-rkey', rx.key);
-
-        const img = document.createElement('img');
-        img.alt = rx.label;
-        const baseMap = { www:'wwww', hou:'ho', eh:'e', n:'n' };
-        const base = baseMap[rx.key] || null;
-        let cand = [];
-        if (base){
-          const b = encodeURIComponent(base);
-          cand = ['/stamps/'+b+'.png','/stamps/'+b+'.webp','/stamps/'+b+'.jpg','/stamps/'+b+'.jpeg'];
-        }
-        let i = 0;
-        img.onerror = () => {
-          i++;
-          if (i < cand.length) img.src = cand[i];
-          else item.innerHTML = `<span style="font-size:28px;line-height:1">${rx.label}</span>`;
-        };
-        if (cand.length){
-          img.src = cand[0];
-          item.appendChild(img);
-        }else{
-          item.innerHTML = `<span style="font-size:28px;line-height:1">${rx.label}</span>`;
-        }
-        grid.appendChild(item);
-      });
-    }
-    function closeStampPicker(){
-      const backdrop = document.getElementById('stampModal');
-      backdrop.style.display = 'none';
-      backdrop.dataset.postid = '';
-    }
-
-    // モーダル選択 → 行にボタンを作って+1
-    document.addEventListener('click', (e)=>{
-      if (e.target.matches('#stampClose') || e.target.matches('#stampModal')){ closeStampPicker(); return; }
-      const btn = e.target.closest('.stamp-item'); if (!btn) return;
-      const back = document.getElementById('stampModal'); if (back.style.display !== 'block') return;
-      const postId = back.dataset.postid; const rkey = btn.getAttribute('data-rkey'); if(!postId || !rkey) return;
-
-      const card = document.querySelector(`[data-postid="${CSS.escape(postId)}"]`);
-      const rx = ensureRxButton(card, rkey) || card.querySelector(`.rx[data-rkey="${CSS.escape(rkey)}"]`);
-      const counter = rx?.querySelector('.c');
-      if (counter){ bumpReaction(postId, rkey, counter); }
-      closeStampPicker();
-    });
-
-    document.addEventListener('DOMContentLoaded', ()=>{ renderUserIcon(); refresh(); });
+    document.addEventListener('DOMContentLoaded',async()=>{const posts=await loadPosts();renderPosts(posts);});
   </script>
-
-  <!-- 追加スタンプ用モーダル -->
-  <div id="stampModal" class="stamp-modal-backdrop" style="display:none" aria-hidden="true">
-    <div class="stamp-modal" role="dialog" aria-modal="true" aria-labelledby="stampTitle">
-      <h3 id="stampTitle">スタンプを選ぶ</h3>
-      <div id="stampGrid" class="stamp-grid"><!-- JSで挿入 --></div>
-      <div class="row-end">
-        <button id="stampClose" type="button" class="btn-close">閉じる</button>
-      </div>
-    </div>
-  </div>
 </body>
 </html>
