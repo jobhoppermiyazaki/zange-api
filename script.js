@@ -89,11 +89,12 @@ function isMyPost(z){
 }
 // 置き換え版：index のカードに「フォロー/フォロー中」ボタンを常に試みて表示
 // 他人カードの名前の右に「フォロー/フォロー中」ボタンを付ける
+// 他人カードの名前の右に「フォロー/フォロー中」ボタンを付ける
 function buildOwnerInfoByZange(z){
   let avatar = "images/default-avatar.png", nickname = "匿名";
   let resolvedOwnerId = z.ownerId || null;
 
-  // 投稿に ownerId があれば users から復元
+  // 投稿の所有者情報（ownerId 優先／旧データ互換）
   if (z.ownerId) {
     const u = getUsers().find(u => u.id === z.ownerId);
     if (u) {
@@ -101,15 +102,19 @@ function buildOwnerInfoByZange(z){
       nickname = u.profile?.nickname || nickname;
     }
   } else if (z.ownerProfile) {
-    // 旧データ互換
     avatar   = z.ownerProfile.avatar   || avatar;
     nickname = z.ownerProfile.nickname || nickname;
   }
 
-  // ownerId が空の古い投稿：ニックネームが一意なら推定（安全に画面表示だけ）
+  // ownerId が無い場合：ニックネームから一意に特定 → なければ影ユーザーを作成
   if (!resolvedOwnerId && nickname && nickname !== "匿名") {
-    const candidates = getUsers().filter(u => (u.profile?.nickname || "") === nickname);
-    if (candidates.length === 1) resolvedOwnerId = candidates[0].id;
+    const sameName = getUsers().filter(u => (u.profile?.nickname || "") === nickname);
+    if (sameName.length === 1) {
+      resolvedOwnerId = sameName[0].id;
+    } else if (sameName.length === 0) {
+      // 投稿データは書き換えず、フォローボタンの対象だけ確保
+      resolvedOwnerId = ensureUserIdForNickname(nickname);
+    }
   }
 
   // 見出しノード
@@ -122,12 +127,12 @@ function buildOwnerInfoByZange(z){
   wrap.appendChild(img);
 
   const name = document.createElement("span");
-  name.textContent = nickname;
+  name.textContent = nickname || "匿名";
   Object.assign(name.style, { fontWeight:"600", fontSize:"15px" });
   wrap.appendChild(name);
 
-  // フォローボタン（自分以外 & 所有者が特定できた時だけ）
-  const me = getAuthUser();
+  // フォローボタン（自分以外 & 対象IDが判明している場合）
+  const me = getAuthUser && getAuthUser();
   if (resolvedOwnerId && me && me.id !== resolvedOwnerId) {
     const isFollowing = (me.following || []).includes(resolvedOwnerId);
     const btn = document.createElement("button");
@@ -137,7 +142,7 @@ function buildOwnerInfoByZange(z){
     btn.textContent = isFollowing ? "フォロー中" : "フォローする";
 
     btn.addEventListener("click", () => {
-      const nowMe = getAuthUser();
+      const nowMe = getAuthUser && getAuthUser();
       if (!nowMe) { alert("ログインが必要です"); return; }
 
       // トグル
@@ -1391,4 +1396,34 @@ function ensureLocalAuthFromActiveOwner(){
   if (!getAuthId()) setAuthId(u.id);
 
   return u;
+}
+// ニックネームからユーザーIDを確実に得る（なければ影ユーザーを作成）
+function ensureUserIdForNickname(nickname){
+  const nn = (nickname || "").trim();
+  if (!nn) return null;
+
+  const users = getUsers();
+  // 既存ユーザーを探す（ニックネーム一致）
+  let u = users.find(x => (x.profile?.nickname || "") === nn);
+
+  // 無ければ影ユーザーを作成（メール等は空）
+  if (!u) {
+    u = {
+      id: uid(),
+      email: "",
+      pass: "",
+      profile: {
+        nickname: nn,
+        avatar: "images/default-avatar.png",
+        gender: "",
+        age: "",
+        bio: ""
+      },
+      following: [],
+      followers: []
+    };
+    users.push(u);
+    saveUsers(users);
+  }
+  return u.id;
 }
