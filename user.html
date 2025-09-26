@@ -9,8 +9,11 @@
     .follow-btn{
       font-size:12px; padding:2px 8px; margin-left:6px;
       border-radius:6px; border:1px solid #ddd; background:#fff; cursor:pointer;
+      transition: all 0.2s ease;
     }
-    .follow-btn.following{ background:#2563eb; color:#fff; border-color:#2563eb; }
+    .follow-btn.following{
+      background:#2563eb; color:#fff; border-color:#2563eb;
+    }
   </style>
 </head>
 <body>
@@ -49,8 +52,20 @@
     function getFollowees(){ try{ return JSON.parse(localStorage.getItem('followees')||'[]') }catch(_){ return [] } }
     function setFollowees(list){ localStorage.setItem('followees', JSON.stringify(list||[])) }
     function isFollowing(name){ return getFollowees().includes(name) }
-    function toggleFollow(name){ let list=getFollowees(); if(isFollowing(name)) list=list.filter(n=>n!==name); else list.push(name); setFollowees(list); }
-    function renderFollowButton(author){ if(!author) return ''; const on=isFollowing(author); return `<button class="follow-btn ${on?'following':''}" data-follow-name="${author}">${on?'フォロー中':'フォロー'}</button>`; }
+    function toggleFollow(name){
+      let list=getFollowees();
+      if(isFollowing(name)){
+        list=list.filter(n=>n!==name);
+      } else {
+        list.push(name);
+      }
+      setFollowees(list);
+    }
+    function renderFollowButton(author){
+      if(!author) return '';
+      const on=isFollowing(author);
+      return `<button class="follow-btn ${on?'following':''}" data-follow-name="${author}">${on?'フォロー中':'フォロー'}</button>`;
+    }
 
     /* ===== render user header ===== */
     function renderUserHeader(user){
@@ -59,10 +74,9 @@
         <div style="display:flex; align-items:center; gap:10px;">
           <img src="${user.icon||'default.png'}" alt="" style="width:50px;height:50px;border-radius:50%;">
           <div>
-            <div style="font-weight:bold">${user.name||'匿名'}</div>
+            <div style="font-weight:bold">${user.name||'匿名'} ${renderFollowButton(user.name||'匿名')}</div>
             <div style="color:#666;font-size:13px;">${user.bio||''}</div>
           </div>
-          ${renderFollowButton(user.name||'匿名')}
         </div>`;
     }
 
@@ -85,7 +99,7 @@
 
     /* ===== main ===== */
     (function main(){
-      // 仮ユーザーデータ（実際はAPIから取得）
+      // 仮ユーザーデータ（実際はAPIから取得想定）
       const user={ name:'テストユーザー', bio:'自己紹介文です。', icon:'photo/sample.jpg' };
       const posts=[
         { id:1, text:'昨日ポテチ食べ過ぎた…', author:'テストユーザー' },
@@ -99,8 +113,12 @@
     /* ===== follow button toggle ===== */
     document.addEventListener('click',(e)=>{
       const btn=e.target.closest('.follow-btn'); if(!btn) return;
-      const name=btn.getAttribute('data-follow-name'); toggleFollow(name);
-      btn.outerHTML=renderFollowButton(name); // 再描画して状態反映
+      const name=btn.getAttribute('data-follow-name');
+      toggleFollow(name);
+      // ページ全体のフォローボタンを再描画
+      document.querySelectorAll(`[data-follow-name="${name}"]`).forEach(el=>{
+        el.outerHTML=renderFollowButton(name);
+      });
     });
   </script>
 </body>
