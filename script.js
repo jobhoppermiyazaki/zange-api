@@ -127,37 +127,54 @@ function buildOwnerInfoByZange(z){
   // ログインユーザー
   const me = (typeof getAuthUser === "function") ? getAuthUser() : null;
 
-  // ボタンは「対象IDが分かっていて、（未ログイン or 自分以外）」なら表示する
-  if (resolvedOwnerId && (!me || me.id !== resolvedOwnerId)) {
-    const isFollowing = me ? ((me.following || []).includes(resolvedOwnerId)) : false;
+  // ---- ここから差し替え ----
+  // 自分自身の投稿ならボタンを出さない（ownerId が取れなくてもニックネーム一致で除外）
+  const myNick = me?.profile?.nickname || "";
+  const isSelfByNick = myNick && nickname && myNick === nickname;
+  const isSelfById   = me && resolvedOwnerId && me.id === resolvedOwnerId;
+
+  if (!isSelfByNick && !isSelfById) {
     const btn = document.createElement("button");
     btn.className = "btn";
-    btn.dataset.followUser = resolvedOwnerId;      // 同一ユーザーの全ボタン同期用
     btn.style.marginLeft = "auto";
-    btn.textContent = isFollowing ? "フォロー中" : "フォローする";
+
+    // 表示時点でIDが未確定でもボタンは出す
+    const ensureTargetId = () => {
+      if (resolvedOwnerId) return resolvedOwnerId;
+      // ニックネームから強制的に確定（無ければ影ユーザー作成）
+      resolvedOwnerId = ensureUserIdForNickname(nickname || "匿名");
+      // 同期用 data 属性を後付け
+      btn.dataset.followUser = resolvedOwnerId;
+      return resolvedOwnerId;
+    };
+
+    // 初期ラベル
+    const followingNow = me && resolvedOwnerId
+      ? (me.following || []).includes(resolvedOwnerId)
+      : false;
+    btn.textContent = followingNow ? "フォロー中" : "フォローする";
+    if (resolvedOwnerId) btn.dataset.followUser = resolvedOwnerId;
 
     btn.addEventListener("click", () => {
       const nowMe = (typeof getAuthUser === "function") ? getAuthUser() : null;
-
-      // 未ログインならログインを促すだけ（UIは出し続ける）
       if (!nowMe) { alert("ログインが必要です"); return; }
 
-      // トグル
-      ((nowMe.following || []).includes(resolvedOwnerId))
-        ? unfollowUser(resolvedOwnerId)
-        : followUser(resolvedOwnerId);
+      const tid = ensureTargetId();
 
-      // 同一ユーザーのボタン表示を一括更新
-      const latest = (getAuthUser()?.following || []).includes(resolvedOwnerId);
-      document.querySelectorAll(`button[data-follow-user="${resolvedOwnerId}"]`)
+      // トグル
+      ((nowMe.following || []).includes(tid)) ? unfollowUser(tid) : followUser(tid);
+
+      // 最新状態でラベル更新（同一ユーザーのボタンを全て）
+      const latest = (getAuthUser()?.following || []).includes(tid);
+      document.querySelectorAll(`button[data-follow-user="${tid}"]`)
         .forEach(b => { b.textContent = latest ? "フォロー中" : "フォローする"; b.disabled = false; });
 
-      // フォロー一覧など別UIも更新（存在すれば）
       if (typeof renderFollowBoxesSafe === "function") renderFollowBoxesSafe();
     });
 
     wrap.appendChild(btn);
   }
+  // ---- ここまで差し替え ----
 
   return wrap;
 }
