@@ -38,6 +38,43 @@
     .follow-posts-modal .close-btn{ padding:8px 12px; border:1px solid #eee; border-radius:10px; background:#fff; }
     .follow-link{ border:none; background:none; padding:0; font:inherit; color:inherit; text-align:left; cursor:pointer; }
   </style>
+  <style>
+  /* --- フォロー一覧をタブの「下」に縦積み表示させる強制レイアウト --- */
+  .follow-tabs { display:block; }
+  .follow-tabs .tabbar {
+    display:flex;
+    gap:12px;
+    align-items:center;
+    margin-bottom:8px;           /* 見出しと中身の間に余白 */
+    position:relative;
+  }
+  .follow-tabs .tab-underline {
+    position:absolute;
+    bottom:-2px;
+    left:0;
+    height:2px;
+    width:50%;
+  }
+
+  /* ここが効きます：パネルは常にブロック要素＆改行 */
+  .follow-tabs .tabpanel {
+    display:block !important;
+    clear:both;                  /* 横並び化を明示解除 */
+    margin-top:6px;
+  }
+
+  /* ステータス行も見出しの下に置く */
+  .follow-tabs .follow-stats.under {
+    display:block;
+    margin:6px 0 10px;
+    clear:both;
+  }
+
+  /* 念のため、リスト自体も縦積み */
+  #followingList, #followersList {
+    display:block;
+  }
+</style>
 </head>
 <body>
   <header>
