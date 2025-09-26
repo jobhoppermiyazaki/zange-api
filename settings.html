@@ -237,6 +237,60 @@
         }
       });
     });
+
+  // フォローリストの描画処理を拡張
+  function renderFollowBoxesSafe(){
+    try {
+      if (typeof getFollowing !== "function" || typeof getFollowers !== "function") return;
+
+      const following = getFollowing() || [];
+      const followers = getFollowers() || [];
+
+      const followingBox = document.getElementById("followingList");
+      const followersBox = document.getElementById("followersList");
+      const statsBox = document.getElementById("followStats");
+
+      // 数字だけ表示
+      if (statsBox) {
+        statsBox.textContent = `フォロー ${following.length}・フォロワー ${followers.length}`;
+      }
+
+      // 1ユーザーを描画する関数
+      const renderUserItem = (user, isFollowing) => {
+        const esc = s => (s||"").replace(/[&<>"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));
+        const avatarSrc = user.avatar || "images/default-avatar.png";
+        const btn = isFollowing
+          ? `<button class="btn danger" data-unfollow="${user.id}">外す</button>`
+          : "";
+        return `
+          <div class="row" style="margin:6px 0; align-items:center;">
+            <img src="${esc(avatarSrc)}" 
+                 alt="avatar" class="avatar" style="width:36px; height:36px; border-radius:50%; object-fit:cover; margin-right:8px;"
+                 onerror="this.onerror=null;this.src='images/default-avatar.png';">
+            <span>${esc(user.nickname || "匿名")}</span>
+            <span class="right">${btn}</span>
+          </div>`;
+      };
+
+      // フォロー中リスト
+      if (followingBox) {
+        followingBox.innerHTML = following.length
+          ? following.map(u => renderUserItem(u, true)).join("")
+          : "<div class='muted'>なし</div>";
+      }
+
+      // フォロワーリスト
+      if (followersBox) {
+        followersBox.innerHTML = followers.length
+          ? followers.map(u => renderUserItem(u, false)).join("")
+          : "<div class='muted'>なし</div>";
+      }
+
+    } catch(e) {
+      console.error("renderFollowBoxesSafe error", e);
+    }
+  }
+    
   </script>
 
   <footer>&copy; 2025 zange (テスト公開中)</footer>
