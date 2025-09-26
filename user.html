@@ -121,5 +121,89 @@
       });
     });
   </script>
+
+<script>
+  /* ===== follow utils (複数ユーザー対応) ===== */
+  function getFollowMap(){
+    try{ return JSON.parse(localStorage.getItem('followees')||'{}') }catch(_){ return {} }
+  }
+  function setFollowMap(map){
+    localStorage.setItem('followees', JSON.stringify(map||{}))
+  }
+  function isFollowing(name){
+    if(!name) return false;
+    const map=getFollowMap();
+    return !!map[name];
+  }
+  function toggleFollow(name){
+    if(!name) return;
+    const map=getFollowMap();
+    map[name] = !map[name];
+    setFollowMap(map);
+  }
+  function renderFollowButton(author){
+    if(!author) return '';
+    const on=isFollowing(author);
+    return `<button class="follow-btn ${on?'following':''}" data-follow-name="${author}">${on?'フォロー中':'フォロー'}</button>`;
+  }
+
+  /* ===== render user header ===== */
+  function renderUserHeader(user){
+    const el=document.getElementById('userHeader');
+    el.innerHTML = `
+      <div style="display:flex; align-items:center; gap:10px;">
+        <img src="${user.icon||'default.png'}" alt="" style="width:50px;height:50px;border-radius:50%;">
+        <div>
+          <div style="font-weight:bold">${user.name||'匿名'} ${renderFollowButton(user.name||'匿名')}</div>
+          <div style="color:#666;font-size:13px;">${user.bio||''}</div>
+        </div>
+      </div>`;
+  }
+
+  /* ===== render posts ===== */
+  function renderUserPosts(posts){
+    const wrap=document.getElementById('userPostsList');
+    wrap.innerHTML='';
+    posts.forEach(p=>{
+      const div=document.createElement('div');
+      div.className='card';
+      div.style.marginBottom='10px';
+      div.innerHTML=`
+        <div style="font-size:15px; line-height:1.6">${p.text||''}</div>
+        <div style="font-size:12px; color:#666; margin-top:6px">
+          by ${p.author||'匿名'} ${renderFollowButton(p.author||'匿名')}
+        </div>`;
+      wrap.appendChild(div);
+    });
+  }
+
+  /* ===== main ===== */
+  (function main(){
+    // 仮ユーザー（複数想定）
+    const users=[
+      { name:'テストユーザーA', bio:'Aの自己紹介', icon:'photo/a.jpg',
+        posts:[{id:1,text:'Aの投稿1',author:'テストユーザーA'},{id:2,text:'Aの投稿2',author:'テストユーザーA'}]},
+      { name:'テストユーザーB', bio:'Bの自己紹介', icon:'photo/b.jpg',
+        posts:[{id:3,text:'Bの投稿1',author:'テストユーザーB'}]}
+    ];
+
+    // 今は最初のユーザーを表示（将来的に userId パラメータなどで切替）
+    const u=users[0];
+    renderUserHeader(u);
+    renderUserPosts(u.posts);
+  })();
+
+  /* ===== follow button toggle ===== */
+  document.addEventListener('click',(e)=>{
+    const btn=e.target.closest('.follow-btn'); if(!btn) return;
+    const name=btn.getAttribute('data-follow-name');
+    toggleFollow(name);
+    // ページ全体の同じユーザーのボタンを更新
+    document.querySelectorAll(`[data-follow-name="${name}"]`).forEach(el=>{
+      el.outerHTML=renderFollowButton(name);
+    });
+  });
+</script>
+  
 </body>
 </html>
