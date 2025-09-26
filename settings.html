@@ -5,12 +5,10 @@
   <title>zange - マイページ</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <link rel="stylesheet" href="style.css" />
-
   <script>
-    /* Render の同一オリジン API を最優先に使う（既存） */
+    /* 既存：同一オリジン API を最優先 */
     window.ZANGE_API_BASE = location.origin.replace(/\/+$/, '') + '/api/posts';
   </script>
-
   <style>
     .section-title{font-weight:800;font-size:18px;margin:8px 0 6px;}
     .card.form{padding:14px}
@@ -18,28 +16,21 @@
     .avatar{width:84px;height:84px;border-radius:50%;object-fit:cover;border:2px solid var(--panel-border,#eee);background:#f6f6f6;display:block}
     .avatar-wrap{display:flex;flex-direction:column;gap:6px;align-items:center}
     .field{display:flex;flex-direction:column;gap:6px;flex:1;min-width:140px}
-    .field input[type="text"], .field input[type="number"], .field textarea, .field select{width:100%}
     .btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
-    .btn{padding:8px 12px;border-radius:10px;border:1px solid #e6e6e6;background:#fff;box-shadow:var(--shadow);cursor:pointer}
-    .btn.danger{background:#ffecec;border-color:#ffc9c9}
+    .btn{padding:8px 12px;border-radius:10px;border:1px solid #e6e6e6;background:#fff;cursor:pointer}
     .btn.primary{background:#111;color:#fff;border-color:#111}
-    .right{margin-left:auto}
     .muted{color:#8a8a8a}
     .pill{padding:6px 10px;border-radius:999px;background:#f1f5f9}
-    .my-post .edit-area{margin-top:8px;display:none !important;}
-    .my-post.editing .edit-area{display:block !important;}
     #profileView p{margin:2px 0}
     #profileView .name{font-weight:700;font-size:16px}
     #profileView .meta{font-size:13px;color:#6b7280}
     #profileView .bio{margin-top:4px}
 
-    /* --- フォロー一覧をタブの「下」に縦積み表示 --- */
-    .follow-tabs{ display:block !important; align-items:unset !important; justify-content:unset !important; }
+    /* フォロー一覧をタブの下に出す（あなたの環境で既に効いている体裁は維持） */
+    .follow-tabs{ display:block !important; }
     .follow-tabs .tabbar{ display:flex !important; gap:12px; align-items:center; margin-bottom:8px; position:relative; }
-    .follow-tabs .tab-underline{ position:absolute; bottom:-2px; left:0; height:2px; width:50%; }
-    .follow-tabs .tabpanel{ display:block !important; width:100% !important; clear:both !important; margin-top:6px; }
+    .follow-tabs .tabpanel{ display:block !important; clear:both !important; margin-top:6px; }
     .follow-tabs .follow-stats.under{ display:block !important; margin:6px 0 10px; clear:both !important; }
-    #followingList, #followersList{ display:block !important; }
   </style>
 </head>
 <body>
@@ -51,17 +42,15 @@
   </header>
 
   <main style="padding-bottom:90px">
-    <!-- 自分のプロフィール（表示モード＋編集モード） -->
+    <!-- プロフィール（表示モード） -->
     <div class="card form">
-      <!-- 表示モード -->
       <div id="profileView">
         <div class="row">
           <div class="avatar-wrap">
-            <!-- 初期はデータURI（404対策）。後で initProfileUI が本物に差し替える -->
-            <img id="profileAvatarShow"
-                 class="avatar"
-                 alt="avatar"
-                 src='data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="84" height="84" viewBox="0 0 84 84"><circle cx="42" cy="42" r="42" fill="%23f1f5f9"/><circle cx="42" cy="34" r="14" fill="%23cbd5e1"/><rect x="16" y="52" width="52" height="20" rx="10" fill="%23cbd5e1"/></svg>'>
+            <!-- 相対パスのデフォルトにして 404 を確実に回避 -->
+            <img id="profileAvatarShow" class="avatar" alt="avatar"
+                 src="images/default-avatar.png"
+                 onerror="this.src='images/default-avatar.png'">
           </div>
           <div class="field" style="min-width:180px;flex:2">
             <p id="profileNameShow" class="name">匿名</p>
@@ -69,20 +58,16 @@
             <p id="profileAgeShow" class="meta">年齢: —</p>
             <p id="profileBioShow" class="bio">自己紹介: —</p>
           </div>
-          <div class="right">
-            <button id="editProfileBtn" class="btn">編集</button>
-          </div>
+          <div class="right"><button id="editProfileBtn" class="btn">編集</button></div>
         </div>
       </div>
 
-      <!-- 編集モード（初期は非表示） -->
+      <!-- 編集モード（既存UI。JSは script.js に委譲） -->
       <div id="profileEdit" style="display:none;">
         <div class="row">
           <div class="avatar-wrap">
-            <img id="profileAvatarPreview"
-                 class="avatar"
-                 alt="avatar"
-                 src='data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="84" height="84" viewBox="0 0 84 84"><circle cx="42" cy="42" r="42" fill="%23f1f5f9"/><circle cx="42" cy="34" r="14" fill="%23cbd5e1"/><rect x="16" y="52" width="52" height="20" rx="10" fill="%23cbd5e1"/></svg>'>
+            <img id="profileAvatarPreview" class="avatar" alt="avatar" src="images/default-avatar.png"
+                 onerror="this.src='images/default-avatar.png'">
             <label class="btn">
               プロフィール画像設定
               <input id="profileAvatarInput" type="file" accept="image/*" style="display:none">
@@ -95,11 +80,7 @@
           <div class="field" style="max-width:140px">
             <label>性別</label>
             <select id="profileGender">
-              <option value="">未選択</option>
-              <option>男性</option>
-              <option>女性</option>
-              <option>その他</option>
-              <option>回答しない</option>
+              <option value="">未選択</option><option>男性</option><option>女性</option><option>その他</option><option>回答しない</option>
             </select>
           </div>
           <div class="field" style="max-width:140px">
@@ -123,7 +104,7 @@
       </div>
     </div>
 
-    <!-- フォロー・フォロワー -->
+    <!-- フォロー/フォロワー -->
     <section class="card">
       <div class="follow-tabs">
         <div class="tabbar" role="tablist" aria-label="follow tabs">
@@ -146,7 +127,7 @@
       </div>
     </section>
 
-    <!-- 自分の投稿 -->
+    <!-- 自分の投稿（既存そのまま） -->
     <div class="card form" style="margin-top:16px">
       <div class="section-title">自分の投稿</div>
       <div class="my-posts-toolbar">
@@ -170,31 +151,88 @@
   </footer>
   <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
 
-  <!-- 既存ロジック（users/following/Followers / initProfileUI など） -->
+  <!-- 既存アプリのロジック -->
   <script src="script.js"></script>
 
-  <!-- ページ固有：ログイン表示 + プロフィール即時ブースト + フォロー欄 -->
+  <!-- ★ 追加：顔画像付きでフォロー/フォロワーを“上書き描画”する薄いラッパー ★ -->
   <script>
-    function esc(s){return (s||'').replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
+    const _esc = s => (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+    const AVA_FALLBACK = 'images/default-avatar.png'; // 相対パスで 404 にならない
 
-    // 1) ヘッダーのログイン表示
-    async function renderUserIcon(){
-      const box=document.getElementById("currentUserIcon"); if(!box) return;
+    function resolveProfileById(uid){
       try{
-        const res=await fetch("/api/me",{credentials:"include",cache:"no-store"});
-        const data=await res.json();
-        if(data.ok&&data.user){
-          const name=data.user.nickname||data.user.email;
-          box.innerHTML=<span class="pill">👤 ${esc(name)}</span>;
-        }else{
-          box.innerHTML=<a href="login.html">ログイン</a>;
-        }
-      }catch{
-        box.innerHTML=<a href="login.html">ログイン</a>;
-      }
+        // 1) profile:<uid>（settings で保存したプロフィール）
+        const p = JSON.parse(localStorage.getItem('profile:'+uid) || '{}');
+        if (p && (p.nickname || p.avatar)) return p;
+      }catch(_){}
+
+      try{
+        // 2) users[uid].profile（アプリ内部のユーザー辞書）
+        const users = JSON.parse(localStorage.getItem('users') || '{}');
+        const u = users && users[uid];
+        if (u && u.profile) return u.profile;
+      }catch(_){}
+
+      return {};
     }
 
-    // 2) 表示欄を即時に埋める（initProfileUI の前に一回描画）
+    function avatarOf(uid){
+      const p = resolveProfileById(uid);
+      return (p && p.avatar) ? p.avatar : AVA_FALLBACK;
+    }
+    function nameOf(uid){
+      const p = resolveProfileById(uid);
+      return p.nickname || p.email || uid;
+    }
+
+    // 既存のリスト描画後に“見た目だけ”を置き換える
+    function enhanceFollowListsWithAvatars(){
+      const users = JSON.parse(localStorage.getItem('users') || '{}');
+      const meId  = localStorage.getItem('authUserId');
+      const me    = users[meId] || {};
+      const following = me.following || [];
+      const followers = me.followers || [];
+
+      // 既存の「外す」動作は unfollowUser にそのまま委譲
+      const rowHTML = (uid, withUnfollow) => `
+        <div class="follow-row" data-uid="${_esc(uid)}" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f1f5f9;">
+          <a class="follow-link" href="user.html?id=${encodeURIComponent(uid)}" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit">
+            <img src="${_esc(avatarOf(uid))}" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover" onerror="this.src='${AVA_FALLBACK}'">
+            <span class="name" style="font-weight:600">${_esc(nameOf(uid))}</span>
+          </a>
+          ${withUnfollow ? `<button type="button" class="btn" data-uid="${_esc(uid)}" style="margin-left:auto">外す</button>` : ``}
+        </div>`.trim();
+
+      const fList = document.getElementById('followingList');
+      if (fList) {
+        fList.innerHTML = following.length ? following.map(uid => rowHTML(uid, true)).join('') : 'なし';
+      }
+      const rList = document.getElementById('followersList');
+      if (rList) {
+        rList.innerHTML = followers.length ? followers.map(uid => rowHTML(uid, false)).join('') : 'なし';
+      }
+
+      // 「外す」ハンドリング（既存の unfollowUser があれば使う）
+      document.querySelectorAll('#followingList .btn[data-uid]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const uid = btn.getAttribute('data-uid');
+          if (typeof unfollowUser === 'function') {
+            unfollowUser(uid);
+          } else {
+            // 念のためのフォールバック（ローカル更新）
+            try{
+              const users = JSON.parse(localStorage.getItem('users') || '{}');
+              const me = users[localStorage.getItem('authUserId')] || (users[localStorage.getItem('authUserId')] = {following:[],followers:[]});
+              me.following = (me.following||[]).filter(x => x !== uid);
+              localStorage.setItem('users', JSON.stringify(users));
+            }catch(_){}
+          }
+          enhanceFollowListsWithAvatars(); // 即時再描画
+        });
+      });
+    }
+
+    // プロフィール表示の即時ブースト（表示が消えないよう、先に埋める）
     function bootstrapProfileView(){
       try{
         if(typeof getProfile!=="function") return;
@@ -204,36 +242,51 @@
         const g=document.getElementById("profileGenderShow");
         const ag=document.getElementById("profileAgeShow");
         const b=document.getElementById("profileBioShow");
-        if(a && p.avatar){ a.src=p.avatar; }
-        if(n){ n.textContent=p.nickname||"匿名"; }
-        if(g){ g.textContent=性別: ${p.gender||"—"}; }
-        if(ag){ ag.textContent=年齢: ${p.age||"—"}; }
-        if(b){ b.textContent=自己紹介: ${p.bio||"—"}; }
+        if(a && p.avatar) a.src=p.avatar;
+        if(n) n.textContent = p.nickname || "匿名";
+        if(g) g.textContent = "性別: " + (p.gender || "—");
+        if(ag) ag.textContent = "年齢: " + (p.age || "—");
+        if(b) b.textContent = "自己紹介: " + (p.bio || "—");
       }catch(_){}
     }
 
-    // 3) 初期化の順番を保証
-    document.addEventListener("DOMContentLoaded", ()=>{
-      renderUserIcon();          // ヘッダー
-      bootstrapProfileView();    // 即時にプロフィール表示
+    // ログインアイコン（既存）
+    async function renderUserIcon(){
+      const box = document.getElementById("currentUserIcon");
+      if (!box) return;
+      try{
+        const res = await fetch("/api/me",{ credentials:"include", cache:"no-store" });
+        const data = await res.json();
+        if (data.ok && data.user){
+          const name = data.user.nickname || data.user.email;
+          box.innerHTML = `<span class="pill">👤 ${_esc(name)}</span>`;
+        }else{
+          box.innerHTML = `<a href="login.html">ログイン</a>`;
+        }
+      }catch{
+        box.innerHTML = `<a href="login.html">ログイン</a>`;
+      }
+    }
 
-      // サーバーログイン→ローカル同期（存在すれば）
-      if(typeof ensureLocalAuthFromActiveOwner==="function"){ ensureLocalAuthFromActiveOwner(); }
+    document.addEventListener('DOMContentLoaded', ()=>{
+      renderUserIcon();
+      bootstrapProfileView();
 
-      // 公式の initProfileUI / renderMyPosts / renderFollowBoxes を走らせる
-      // （script.js 側でも DOMContentLoaded で呼ばれるが、二重呼び出しは安全）
-      if(typeof initProfileUI==="function") initProfileUI();
+      // 既存の初期化（あれば走らせる）
+      if (typeof ensureLocalAuthFromActiveOwner === 'function') ensureLocalAuthFromActiveOwner();
+      if (typeof initProfileUI === 'function') initProfileUI();
+      if (typeof renderFollowBoxesSafe === 'function') renderFollowBoxesSafe();
 
-      // フォロー欄はタイミングずれ防止で micro delay
-      setTimeout(()=>{ if(typeof renderFollowBoxesSafe==="function") renderFollowBoxesSafe(); }, 0);
+      // 顔画像付きに上書き
+      enhanceFollowListsWithAvatars();
 
-      // 別タブや index.html の操作も即時反映
-      window.addEventListener("storage",(e)=>{
-        if(!e.key) return;
-        if(e.key==="users"||e.key==="authUserId"||e.key==="profile"||(e.key||"").startsWith("profile:")){
+      // 他タブ/他ページでフォローやプロフィールが変わったら即追随
+      window.addEventListener('storage', (e)=>{
+        if (!e.key) return;
+        if (e.key === 'users' || e.key === 'authUserId' || e.key === 'profile' || e.key.startsWith('profile:')){
           bootstrapProfileView();
-          if(typeof initProfileUI==="function") initProfileUI();
-          if(typeof renderFollowBoxesSafe==="function") renderFollowBoxesSafe();
+          if (typeof renderFollowBoxesSafe === 'function') renderFollowBoxesSafe();
+          enhanceFollowListsWithAvatars();
         }
       });
     });
