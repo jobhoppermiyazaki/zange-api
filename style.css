@@ -1283,3 +1283,7 @@ html, body {
   .post-hero{ height: 170px; }
   .post-title{ font-size: 17px; }
 }
+/* オーナー行（最初の行）でボタンが右端に収まるように */
+.card > div:first-child { display:flex; align-items:center; gap:10px; }
+.card > div:first-child span { flex:1 1 auto; min-width:0; }
+.card > div:first-child .btn { white-space:nowrap; }
