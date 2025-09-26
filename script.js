@@ -1448,3 +1448,17 @@ function ensureUserIdForNickname(nickname){
   }
   return u.id;
 }
+// ★カード完成後に必ず呼ぶ：ヘッダ(フォローボタン含む)を“最終”で載せる
+function mountOwnerHead(card, z) {
+  if (!card) return;
+  // 既存があれば一旦除去（ちらつき/重複対策）
+  const old = card.querySelector('.z-owner-head');
+  if (old) old.remove();
+
+  const head = buildOwnerInfoByZange(z);
+  if (!head) return;
+  head.classList.add('z-owner-head');
+
+  // 見た目は先頭に置きたいので firstChild の前に差し込む
+  card.insertBefore(head, card.firstChild);
+}
