@@ -92,6 +92,7 @@ function buildOwnerInfoByZange(z){
   let avatar = "images/default-avatar.png", nickname = "匿名";
   let resolvedOwnerId = z.ownerId || null;
 
+// --- ここから置き換え ---
   // 投稿の所有者情報（ownerId 優先／旧データ互換）
   if (z.ownerId) {
     const u = getUsers().find(u => u.id === z.ownerId);
@@ -104,11 +105,34 @@ function buildOwnerInfoByZange(z){
     nickname = z.ownerProfile.nickname || nickname;
   }
 
-  // ownerId が無ければニックネームから推定（無ければ影ユーザー作成）
-  if (!resolvedOwnerId && nickname) {
-    const same = getUsers().filter(u => (u.profile?.nickname || "") === nickname);
-    resolvedOwnerId = same.length ? same[0].id : ensureUserIdForNickname(nickname);
+  // ログインユーザーを先に取得
+  const me = (typeof getAuthUser === "function") ? getAuthUser() : null;
+
+  // ownerId が無い場合：ニックネームから「自分以外」を優先採用。居なければ影ユーザーを生成
+  if (!z.ownerId && nickname) {
+    const users = getUsers();
+    let cand = users.find(u => (u.profile?.nickname || "") === nickname && (!me || u.id !== me.id));
+    if (!cand) {
+      cand = {
+        id: uid(),
+        email: "",
+        pass: "",
+        profile: { nickname, avatar: "images/default-avatar.png", gender: "", age: "", bio: "" },
+        following: [],
+        followers: []
+      };
+      users.push(cand);
+      saveUsers(users);
+    }
+    resolvedOwnerId = cand.id;
+  } else {
+    resolvedOwnerId = z.ownerId || null;
   }
+
+  // 「自分の投稿か？」の判定は ownerId が付いている時だけに限定（ニックネーム一致では隠さない）
+  const isMyExact = !!(me && z.ownerId && String(z.ownerId) === String(me.id));
+// --- ここまで置き換え ---
+
 
   // 見出しノード
   const wrap = document.createElement("div");
