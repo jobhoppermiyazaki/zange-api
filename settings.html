@@ -165,7 +165,7 @@
   <!-- 既存ロジック（users/following/Followers を管理） -->
   <script src="script.js"></script>
 
-  <!-- ページ固有の最小 JS：ログイン表示 & フォロー一覧の再描画だけ -->
+  <!-- ページ固有の最小 JS：ログイン表示 & フォロー一覧の再描画 -->
   <script>
     async function renderUserIcon(){
       const box = document.getElementById("currentUserIcon");
@@ -186,12 +186,26 @@
     }
 
     document.addEventListener("DOMContentLoaded", () => {
+      // ヘッダーのログイン表示
       renderUserIcon();
 
-      /* ここがポイント：script.js の正式実装を利用して描画 */
-      if (typeof renderFollowBoxesSafe === "function") {
-        renderFollowBoxesSafe();
+      // ★ 重要：サーバーのアクティブユーザー(email) → ローカル users/auth へ同期
+      if (typeof ensureLocalAuthFromActiveOwner === "function") {
+        ensureLocalAuthFromActiveOwner();
       }
+
+      // ★ 同期直後にフォロー欄を確実に描画（レンダリング順のズレ対策で 0ms ディレイ）
+      setTimeout(() => {
+        if (typeof renderFollowBoxesSafe === "function") renderFollowBoxesSafe();
+      }, 0);
+
+      // ★ 別タブ/他ページでの変更も即時反映（フォロー操作・プロフィール更新など）
+      window.addEventListener("storage", (e) => {
+        if (!e.key) return;
+        if (e.key === "users" || e.key === "authUserId" || e.key === "profile" || (e.key||"").startsWith("profile:")) {
+          if (typeof renderFollowBoxesSafe === "function") renderFollowBoxesSafe();
+        }
+      });
     });
 
     /* タブ切替は script.js の initFollowTabs が面倒を見ます */
