@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>zange - 検索</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- 検索カード用ミニスタイル（既存デザインを踏襲） -->
+  <style>
+    .feed-card{ padding:0; overflow:hidden }
+    .feed-head{ display:flex; align-items:center; gap:12px; padding:14px 16px; }
+    .feed-avatar{
+      width:44px; height:44px; border-radius:50%;
+      background:#fdece9; color:#666; font-weight:900;
+      display:grid; place-items:center; flex:0 0 auto; letter-spacing:.02em;
+      overflow:hidden;
+    }
+    .feed-avatar img{ width:100%; height:100%; object-fit:cover; display:block; border-radius:50%; }
+    .feed-username{ font-weight:800; font-size:16px }
+    .follow-btn{
+      margin-left:auto; font-size:14px; padding:4px 10px;
+      border-radius:6px; border:1px solid #ddd; background:#fff; cursor:pointer;
+    }
+    .follow-btn.following{ background:#2563eb; color:#fff; border-color:#2563eb; }
+    .feed-visual img{ width:100%; height:auto; display:block; background:#f3f4f6; }
+    .feed-visual.placeholder{ background:#f3f4f6; aspect-ratio:16/9; }
+    .feed-title{ margin:14px 16px 4px; font-size:clamp(18px,5.2vw,26px); line-height:1.4; font-weight:900; }
+    .feed-date{ color:#6b7280; font-size:13px; margin:0 16px 8px }
+    .feed-chips{ display:flex; flex-wrap:wrap; gap:8px; margin:0 16px 14px }
+    .chip{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; background:#f3f4f6; color:#111; font-weight:700; }
+    .chip .ic{ font-size:16px; line-height:1 }
+    .feed-footer{ display:flex; justify-content:flex-end; padding:0 16px 16px; }
+    .btn-link{ text-decoration:none; font-weight:800; color:#2f6fb0; padding:6px 10px; border-radius:8px; background:#f7fbff; border:1px solid #e6f0ff; }
+  </style>
+</head>
+<body>
+  <header>
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <h1><a href="index.html" style="text-decoration:none; color:inherit;">zange</a></h1>
+      <span id="currentUserIcon"></span>
+    </div>
+  </header>
+
+  <main>
+    <form class="card" onsubmit="return false">
+      <label>キーワード</label>
+      <input type="text" id="searchBox" placeholder="例：妻 / 上司 / ポテチ / #我慢 など">
+    </form>
+
+    <section id="searchResults"></section>
+  </main>
+
+  <!-- フッター＆FAB（共通） -->
+  <footer class="mobile-tabbar">
+    <nav>
+      <a href="index.html"><span class="icon">🏠</span><span class="label">ホーム</span></a>
+      <a href="topics.html"><span class="icon">🎯</span><span class="label">お題</span></a>
+      <a href="notifications.html" class="nav-link nav-bell">
+        <span class="icon-row"><span class="icon">🔔</span><span id="notifBadge" class="notif-badge" aria-label="未読通知数"></span></span>
+        <span class="label">通知</span>
+      </a>
+      <a href="settings.html"><span class="icon">⚙️</span><span class="label">設定</span></a>
+      <a href="about.html"><span class="icon">📕</span><span class="label">概要</span></a>
+    </nav>
+  </footer>
+  <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
+  <footer>&copy; 2025 zange (テスト公開中)</footer>
+
+  <!-- 既存の共通ロジック -->
+  <script src="script.js"></script>
+
+  <!-- 検索ページ固有ロジック（フォローボタンをカード描画内で統合） -->
+  <script>
+    /* ========= ユーティリティ ========= */
+    function escapeHTML(s){ return (s||"").replace(/[&<>"']/g,m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m])) }
+    function fmtDate(iso){ const d=new Date(iso||''); if(isNaN(d)) return ''; const y=d.getFullYear(), m=('0'+(d.getMonth()+1)).slice(-2), dd=('0'+d.getDate()).slice(-2); return `${y}/${m}/${dd}` }
+    function resolveBgUrl(bg){ if(!bg) return ''; if(/^https?:\/\//i.test(bg)) return bg; return 'images/'+String(bg).replace(/^\/+/,'') }
+
+    /* ========= フォロー（localStorage） ========= */
+    function getFollowees(){ try{ return JSON.parse(localStorage.getItem('followees')||'[]') }catch(_){ return [] } }
+    function setFollowees(list){ localStorage.setItem('followees', JSON.stringify(list||[])) }
+    function isFollowing(name){ return getFollowees().includes(name) }
+    function toggleFollow(name){
+      let list=getFollowees();
+      if(isFollowing(name)) list=list.filter(n=>n!==name);
+      else list.push(name);
+      setFollowees(list);
+    }
+    function renderFollowButton(author){
+      if(!author) return '';
+      const on=isFollowing(author);
+      return `<button class="follow-btn ${on?'following':''}" data-follow-name="${escapeHTML(author)}">${on?'フォロー中':'フォロー'}</button>`;
+    }
+
+    /* ========= データ取得 ========= */
+    async function loadAllPosts(){
+      // API が落ちている場合でも空配列を返して画面は崩さない
+      try{
+        const r = await fetch('/api/posts', { credentials:'include', cache:'no-store' });
+        const data = await r.json();
+        return Array.isArray(data)? data : [];
+      }catch(_){ return []; }
+    }
+
+    /* ========= 描画 ========= */
+    function renderResults(all, q){
+      const host = document.getElementById('searchResults');
+      host.innerHTML = '';
+
+      const kw = (q||'').trim().toLowerCase();
+      const list = !kw ? all : all.filter(p=>{
+        const hay = `${p.text||''} ${p.target||''} ${p.tag||''}`.toLowerCase();
+        return hay.includes(kw);
+      });
+
+      if(!list.length){
+        host.innerHTML = `<div class="card muted">該当する投稿はありません。</div>`;
+        return;
+      }
+
+      list.forEach(p=>{
+        const author = p.author || '匿名';
+        const avatarCh = author.trim()[0] || '匿';
+        const when = fmtDate(p.createdAt || p.date);
+        const bgUrl = resolveBgUrl(p.bg || '');
+        const hasImg = !!bgUrl;
+
+        const card = document.createElement('article');
+        card.className = 'card feed-card';
+        card.setAttribute('data-postid', String(p.id));
+
+        card.innerHTML = `
+          <div class="feed-head">
+            <div class="feed-avatar" aria-hidden="true">${escapeHTML(avatarCh)}</div>
+            <div class="feed-username">${escapeHTML(author)}</div>
+            ${renderFollowButton(author)}
+          </div>
+
+          ${hasImg
+            ? `<div class="feed-visual"><img src="${escapeHTML(bgUrl)}" alt=""></div>`
+            : `<div class="feed-visual placeholder"></div>`}
+
+          <h2 class="feed-title">${escapeHTML(p.text || '')}</h2>
+          <div class="feed-date">${when}</div>
+
+          <div class="feed-chips">
+            ${p.target ? `<span class="chip"><span class="ic">🙏</span><span>${escapeHTML(p.target)}</span></span>` : ''}
+            ${p.tag ? `<span class="chip"><span class="ic">🔖</span><span>${escapeHTML(p.tag)}</span></span>` : ''}
+          </div>
+
+          <div class="feed-footer">
+            <a class="btn-link" href="detail.html?id=${encodeURIComponent(p.id)}">コメント</a>
+          </div>
+        `;
+        host.appendChild(card);
+      });
+    }
+
+    /* ========= イベント ========= */
+    // フォロートグル（描画と同じ関数で“上書き再描画”するので消えない）
+    document.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.follow-btn');
+      if(!btn) return;
+      const name = btn.getAttribute('data-follow-name');
+      toggleFollow(name);
+      // ボタンだけ安全に差し替え（カード全体は再描画しない）
+      btn.outerHTML = renderFollowButton(name);
+    });
+
+    // 入力で即時フィルタ
+    let _postsCache = [];
+    async function init(){
+      const input = document.getElementById('searchBox');
+      // URL ?q= の初期値反映
+      const params = new URLSearchParams(location.search);
+      const q = params.get('q') || '';
+      if(input) input.value = q;
+
+      _postsCache = await loadAllPosts();
+      renderResults(_postsCache, q);
+
+      input?.addEventListener('input', ()=> renderResults(_postsCache, input.value));
+      input?.addEventListener('keydown', (ev)=>{ if(ev.key==='Enter'){ ev.preventDefault(); renderResults(_postsCache, input.value); }});
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
