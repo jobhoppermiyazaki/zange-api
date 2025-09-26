@@ -87,9 +87,7 @@ function isMyPost(z){
   if(me && z.ownerId && String(z.ownerId)===String(me.id)) return true;
   return z.owner==="me"; // 旧データ互換
 }
-// 置き換え版：index のカードに「フォロー/フォロー中」ボタンを常に試みて表示
-// 他人カードの名前の右に「フォロー/フォロー中」ボタンを付ける
-// 他人カードの名前の右に「フォロー/フォロー中」ボタンを付ける
+// 他人カードの名前の右に「フォロー/フォロー中」ボタンを付ける（未ログインでも見せる）
 function buildOwnerInfoByZange(z){
   let avatar = "images/default-avatar.png", nickname = "匿名";
   let resolvedOwnerId = z.ownerId || null;
@@ -106,15 +104,10 @@ function buildOwnerInfoByZange(z){
     nickname = z.ownerProfile.nickname || nickname;
   }
 
-  // ownerId が無い場合：ニックネームから一意に特定 → なければ影ユーザーを作成
-  if (!resolvedOwnerId && nickname && nickname !== "匿名") {
-    const sameName = getUsers().filter(u => (u.profile?.nickname || "") === nickname);
-    if (sameName.length === 1) {
-      resolvedOwnerId = sameName[0].id;
-    } else if (sameName.length === 0) {
-      // 投稿データは書き換えず、フォローボタンの対象だけ確保
-      resolvedOwnerId = ensureUserIdForNickname(nickname);
-    }
+  // ownerId が無い場合：ニックネームから既存ユーザーを優先採用（複数いても先頭を採用）→ 無ければ影ユーザー作成
+  if (!resolvedOwnerId && nickname) {
+    const same = getUsers().filter(u => (u.profile?.nickname || "") === nickname);
+    resolvedOwnerId = same.length ? same[0].id : ensureUserIdForNickname(nickname);
   }
 
   // 見出しノード
@@ -128,13 +121,15 @@ function buildOwnerInfoByZange(z){
 
   const name = document.createElement("span");
   name.textContent = nickname || "匿名";
-  Object.assign(name.style, { fontWeight:"600", fontSize:"15px" });
+  Object.assign(name.style, { fontWeight:"600", fontSize:"15px", flex:"1 1 auto" }); // ← 右端にボタンを逃がす
   wrap.appendChild(name);
 
-  // フォローボタン（自分以外 & 対象IDが判明している場合）
-  const me = getAuthUser && getAuthUser();
-  if (resolvedOwnerId && me && me.id !== resolvedOwnerId) {
-    const isFollowing = (me.following || []).includes(resolvedOwnerId);
+  // ログインユーザー
+  const me = (typeof getAuthUser === "function") ? getAuthUser() : null;
+
+  // ボタンは「対象IDが分かっていて、（未ログイン or 自分以外）」なら表示する
+  if (resolvedOwnerId && (!me || me.id !== resolvedOwnerId)) {
+    const isFollowing = me ? ((me.following || []).includes(resolvedOwnerId)) : false;
     const btn = document.createElement("button");
     btn.className = "btn";
     btn.dataset.followUser = resolvedOwnerId;      // 同一ユーザーの全ボタン同期用
@@ -142,7 +137,9 @@ function buildOwnerInfoByZange(z){
     btn.textContent = isFollowing ? "フォロー中" : "フォローする";
 
     btn.addEventListener("click", () => {
-      const nowMe = getAuthUser && getAuthUser();
+      const nowMe = (typeof getAuthUser === "function") ? getAuthUser() : null;
+
+      // 未ログインならログインを促すだけ（UIは出し続ける）
       if (!nowMe) { alert("ログインが必要です"); return; }
 
       // トグル
