@@ -71,6 +71,7 @@ function followUser(targetId){
   if(!you.followers.includes(me.id)) you.followers.push(me.id);
   saveUsers(users.map(u=>u.id===me.id?me:(u.id===you.id?you:u)));
 }
+
 function unfollowUser(targetId){
   const me=getAuthUser(); if(!me){ alert("ログインが必要です"); return; }
   const users=getUsers(); const you=users.find(u=>u.id===targetId); if(!you) return;
@@ -87,11 +88,12 @@ function isMyPost(z){
   return z.owner==="me"; // 旧データ互換
 }
 // 置き換え版：index のカードに「フォロー/フォロー中」ボタンを常に試みて表示
+// 他人カードの名前の右に「フォロー/フォロー中」ボタンを付ける
 function buildOwnerInfoByZange(z){
   let avatar = "images/default-avatar.png", nickname = "匿名";
   let resolvedOwnerId = z.ownerId || null;
 
-  // 既存の所有者情報を復元
+  // 投稿に ownerId があれば users から復元
   if (z.ownerId) {
     const u = getUsers().find(u => u.id === z.ownerId);
     if (u) {
@@ -99,20 +101,18 @@ function buildOwnerInfoByZange(z){
       nickname = u.profile?.nickname || nickname;
     }
   } else if (z.ownerProfile) {
+    // 旧データ互換
     avatar   = z.ownerProfile.avatar   || avatar;
     nickname = z.ownerProfile.nickname || nickname;
   }
 
-  // ownerId が無い古い投稿でも、ニックネームが一意ならユーザーを推定
+  // ownerId が空の古い投稿：ニックネームが一意なら推定（安全に画面表示だけ）
   if (!resolvedOwnerId && nickname && nickname !== "匿名") {
     const candidates = getUsers().filter(u => (u.profile?.nickname || "") === nickname);
-    if (candidates.length === 1) {
-      resolvedOwnerId = candidates[0].id;
-      // 投稿データには書き戻さない（既存仕様維持＆安全のため）
-    }
+    if (candidates.length === 1) resolvedOwnerId = candidates[0].id;
   }
 
-  // 表示ノード
+  // 見出しノード
   const wrap = document.createElement("div");
   Object.assign(wrap.style, { display:"flex", alignItems:"center", gap:"10px", marginBottom:"6px" });
 
@@ -132,23 +132,25 @@ function buildOwnerInfoByZange(z){
     const isFollowing = (me.following || []).includes(resolvedOwnerId);
     const btn = document.createElement("button");
     btn.className = "btn";
-    btn.dataset.followUser = resolvedOwnerId;
+    btn.dataset.followUser = resolvedOwnerId;      // 同一ユーザーの全ボタン同期用
     btn.style.marginLeft = "auto";
     btn.textContent = isFollowing ? "フォロー中" : "フォローする";
 
     btn.addEventListener("click", () => {
       const nowMe = getAuthUser();
       if (!nowMe) { alert("ログインが必要です"); return; }
+
+      // トグル
       ((nowMe.following || []).includes(resolvedOwnerId))
         ? unfollowUser(resolvedOwnerId)
         : followUser(resolvedOwnerId);
 
+      // 同一ユーザーのボタン表示を一括更新
       const latest = (getAuthUser()?.following || []).includes(resolvedOwnerId);
-      // 同一ユーザーの全ボタンを更新
       document.querySelectorAll(`button[data-follow-user="${resolvedOwnerId}"]`)
         .forEach(b => { b.textContent = latest ? "フォロー中" : "フォローする"; b.disabled = false; });
 
-      // 既存仕様のままフォロー欄も更新
+      // フォロー一覧など別UIも更新（存在すれば）
       if (typeof renderFollowBoxesSafe === "function") renderFollowBoxesSafe();
     });
 
@@ -437,7 +439,8 @@ if(timeline){
   timeline.innerHTML="";
   list.forEach(z=>{
     const card=document.createElement("div"); card.className="card";
-    const owner=buildOwnerInfoByZange(z); if(owner) card.appendChild(owner);
+    const owner = buildOwnerInfoByZange(z);
+    if (owner) card.appendChild(owner);
 
     if(typeof z.bg==="string" && z.bg.trim()!==""){
       const vis=document.createElement("div"); vis.className="zange-visual";
