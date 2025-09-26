@@ -87,8 +87,7 @@ function isMyPost(z){
   if(me && z.ownerId && String(z.ownerId)===String(me.id)) return true;
   return z.owner==="me"; // 旧データ互換
 }
-// 他人カードの名前の右に「フォロー/フォロー中」ボタンを付ける（未ログインでも見せる）
-// 他人カードの名前の右に「フォロー/フォロー中」ボタンを付ける（未ログインでも表示）
+// === index/detail/search などのカード先頭に「フォロー」ボタンを必ず表示する ===
 function buildOwnerInfoByZange(z){
   let avatar = "images/default-avatar.png", nickname = "匿名";
   let resolvedOwnerId = z.ownerId || null;
@@ -105,7 +104,7 @@ function buildOwnerInfoByZange(z){
     nickname = z.ownerProfile.nickname || nickname;
   }
 
-  // ownerId が無ければニックネームから推定（なければ影ユーザーを作成）
+  // ownerId が無ければニックネームから推定（無ければ影ユーザー作成）
   if (!resolvedOwnerId && nickname) {
     const same = getUsers().filter(u => (u.profile?.nickname || "") === nickname);
     resolvedOwnerId = same.length ? same[0].id : ensureUserIdForNickname(nickname);
@@ -113,60 +112,62 @@ function buildOwnerInfoByZange(z){
 
   // 見出しノード
   const wrap = document.createElement("div");
-  Object.assign(wrap.style, { display:"flex", alignItems:"center", gap:"10px", marginBottom:"6px" });
+  wrap.style.cssText = "display:flex;align-items:center;gap:10px;margin-bottom:6px;";
 
   const img = document.createElement("img");
-  Object.assign(img, { src: avatar, alt: "avatar" });
-  Object.assign(img.style, { width:"40px", height:"40px", borderRadius:"50%", objectFit:"cover" });
+  img.src = avatar; img.alt = "avatar";
+  img.style.cssText = "width:40px;height:40px;border-radius:50%;object-fit:cover;";
   wrap.appendChild(img);
 
   const name = document.createElement("span");
   name.textContent = nickname || "匿名";
-  Object.assign(name.style, { fontWeight:"600", fontSize:"15px", flex:"1 1 auto", minWidth:"0" });
+  name.style.cssText = "font-weight:600;font-size:15px;flex:1 1 auto;min-width:0;";
   wrap.appendChild(name);
 
   const me = (typeof getAuthUser === "function") ? getAuthUser() : null;
 
-  // 自分の投稿は除外（ownerId が無くてもニックネーム一致でブロック）
+  // 自分の投稿は除外（ID一致 or ニックネーム一致）
   const myNick = me?.profile?.nickname || "";
-  const isSelfByNick = myNick && nickname && myNick === nickname;
-  const isSelfById   = me && resolvedOwnerId && me.id === resolvedOwnerId;
+  const isSelf = (me && resolvedOwnerId && me.id === resolvedOwnerId) ||
+                 (myNick && nickname && myNick === nickname);
 
-  if (!isSelfByNick && !isSelfById) {
+  if (!isSelf) {
+    // 他の CSS に潰されないよう、インラインで見た目を固定
     const btn = document.createElement("button");
-    btn.className = "btn";
-    btn.style.marginLeft = "auto";
-    btn.style.whiteSpace = "nowrap";
+    btn.type = "button";
+    btn.dataset.followUser = resolvedOwnerId || ""; // まだ未確定でも一旦付ける
+    btn.textContent = (me && resolvedOwnerId && (me.following||[]).includes(resolvedOwnerId))
+                      ? "フォロー中" : "フォローする";
+    btn.style.cssText = [
+      "margin-left:auto",
+      "padding:6px 10px",
+      "font-size:12px",
+      "border:1px solid #e5e7eb",
+      "border-radius:999px",
+      "background:#f8fafc",
+      "cursor:pointer",
+      "display:inline-block",    // ← 強制表示
+      "white-space:nowrap"       // ← 折り返し防止
+    ].join(";");
 
-    // data 属性は確定していれば付与（未確定でも描画はする）
-    if (resolvedOwnerId) btn.dataset.followUser = resolvedOwnerId;
-
-    // クリック時にIDを必ず確定させる
-    const ensureTargetId = () => {
-      if (resolvedOwnerId) return resolvedOwnerId;
-      resolvedOwnerId = ensureUserIdForNickname(nickname || "匿名");
-      btn.dataset.followUser = resolvedOwnerId; // 同期用に付与
-      return resolvedOwnerId;
-    };
-
-    // 初期ラベル
-    const followingNow = me && resolvedOwnerId
-      ? (me.following || []).includes(resolvedOwnerId)
-      : false;
-    btn.textContent = followingNow ? "フォロー中" : "フォローする";
-
+    // クリックで ID を必ず確定させてからトグル
     btn.addEventListener("click", () => {
       const nowMe = (typeof getAuthUser === "function") ? getAuthUser() : null;
       if (!nowMe) { alert("ログインが必要です"); return; }
 
-      const tid = ensureTargetId();
+      // 未確定ならここで確定
+      if (!resolvedOwnerId) {
+        resolvedOwnerId = ensureUserIdForNickname(nickname || "匿名");
+        btn.dataset.followUser = resolvedOwnerId;
+      }
 
-      // トグル
-      ((nowMe.following || []).includes(tid)) ? unfollowUser(tid) : followUser(tid);
+      ((nowMe.following || []).includes(resolvedOwnerId))
+        ? unfollowUser(resolvedOwnerId)
+        : followUser(resolvedOwnerId);
 
-      // 同一ユーザーのボタンを一括更新
-      const latest = (getAuthUser()?.following || []).includes(tid);
-      document.querySelectorAll(`button[data-follow-user="${tid}"]`)
+      // 同一ユーザーの全ボタンを同期
+      const latest = (getAuthUser()?.following || []).includes(resolvedOwnerId);
+      document.querySelectorAll(`button[data-follow-user="${resolvedOwnerId}"]`)
         .forEach(b => { b.textContent = latest ? "フォロー中" : "フォローする"; b.disabled = false; });
 
       if (typeof renderFollowBoxesSafe === "function") renderFollowBoxesSafe();
