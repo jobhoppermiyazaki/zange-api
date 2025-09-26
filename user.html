@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>zange - ユーザー</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .follow-btn{
+      font-size:12px; padding:2px 8px; margin-left:6px;
+      border-radius:6px; border:1px solid #ddd; background:#fff; cursor:pointer;
+    }
+    .follow-btn.following{ background:#2563eb; color:#fff; border-color:#2563eb; }
+  </style>
+</head>
+<body>
+  <header>
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <h1><a href="index.html" style="text-decoration:none; color:inherit;">zange</a></h1>
+      <span id="currentUserIcon"></span>
+    </div>
+  </header>
+
+  <main id="userProfilePage" style="padding-bottom:90px">
+    <div class="card form" id="userHeader"></div>
+    <div class="card form" style="margin-top:16px">
+      <div class="section-title">公開投稿</div>
+      <div id="userPostsList" style="margin-top:10px"></div>
+    </div>
+  </main>
+
+  <footer class="mobile-tabbar">
+    <nav>
+      <a href="index.html"><span class="icon">🏠</span><span class="label">ホーム</span></a>
+      <a href="topics.html"><span class="icon">🎯</span><span class="label">お題</span></a>
+      <a href="notifications.html" class="nav-link nav-bell">
+        <span class="icon-row"><span class="icon">🔔</span><span id="notifBadge" class="notif-badge" aria-label="未読通知数"></span></span>
+        <span class="label">通知</span>
+      </a>
+      <a href="settings.html"><span class="icon">⚙️</span><span class="label">設定</span></a>
+      <a href="about.html"><span class="icon">📕</span><span class="label">概要</span></a>
+    </nav>
+  </footer>
+  <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
+
+  <script src="script.js"></script>
+  <script>
+    /* ===== follow utils ===== */
+    function getFollowees(){ try{ return JSON.parse(localStorage.getItem('followees')||'[]') }catch(_){ return [] } }
+    function setFollowees(list){ localStorage.setItem('followees', JSON.stringify(list||[])) }
+    function isFollowing(name){ return getFollowees().includes(name) }
+    function toggleFollow(name){ let list=getFollowees(); if(isFollowing(name)) list=list.filter(n=>n!==name); else list.push(name); setFollowees(list); }
+    function renderFollowButton(author){ if(!author) return ''; const on=isFollowing(author); return `<button class="follow-btn ${on?'following':''}" data-follow-name="${author}">${on?'フォロー中':'フォロー'}</button>`; }
+
+    /* ===== render user header ===== */
+    function renderUserHeader(user){
+      const el=document.getElementById('userHeader');
+      el.innerHTML = `
+        <div style="display:flex; align-items:center; gap:10px;">
+          <img src="${user.icon||'default.png'}" alt="" style="width:50px;height:50px;border-radius:50%;">
+          <div>
+            <div style="font-weight:bold">${user.name||'匿名'}</div>
+            <div style="color:#666;font-size:13px;">${user.bio||''}</div>
+          </div>
+          ${renderFollowButton(user.name||'匿名')}
+        </div>`;
+    }
+
+    /* ===== render posts ===== */
+    function renderUserPosts(posts){
+      const wrap=document.getElementById('userPostsList');
+      wrap.innerHTML='';
+      posts.forEach(p=>{
+        const div=document.createElement('div');
+        div.className='card';
+        div.style.marginBottom='10px';
+        div.innerHTML=`
+          <div style="font-size:15px; line-height:1.6">${p.text||''}</div>
+          <div style="font-size:12px; color:#666; margin-top:6px">
+            by ${p.author||'匿名'} ${renderFollowButton(p.author||'匿名')}
+          </div>`;
+        wrap.appendChild(div);
+      });
+    }
+
+    /* ===== main ===== */
+    (function main(){
+      // 仮ユーザーデータ（実際はAPIから取得）
+      const user={ name:'テストユーザー', bio:'自己紹介文です。', icon:'photo/sample.jpg' };
+      const posts=[
+        { id:1, text:'昨日ポテチ食べ過ぎた…', author:'テストユーザー' },
+        { id:2, text:'上司に謝れなかった', author:'テストユーザー' }
+      ];
+
+      renderUserHeader(user);
+      renderUserPosts(posts);
+    })();
+
+    /* ===== follow button toggle ===== */
+    document.addEventListener('click',(e)=>{
+      const btn=e.target.closest('.follow-btn'); if(!btn) return;
+      const name=btn.getAttribute('data-follow-name'); toggleFollow(name);
+      btn.outerHTML=renderFollowButton(name); // 再描画して状態反映
+    });
+  </script>
+</body>
+</html>
