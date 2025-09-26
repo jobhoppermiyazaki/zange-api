@@ -37,43 +37,40 @@
     .follow-posts-modal .sheet .head{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;}
     .follow-posts-modal .close-btn{ padding:8px 12px; border:1px solid #eee; border-radius:10px; background:#fff; }
     .follow-link{ border:none; background:none; padding:0; font:inherit; color:inherit; text-align:left; cursor:pointer; }
-  
-  /* --- フォロー一覧をタブの「下」に縦積み表示させる強制レイアウト --- */
-  .follow-tabs { display:block; }
-  .follow-tabs .tabbar {
-    display:flex;
-    gap:12px;
-    align-items:center;
-    margin-bottom:8px;           /* 見出しと中身の間に余白 */
-    position:relative;
-  }
-  .follow-tabs .tab-underline {
-    position:absolute;
-    bottom:-2px;
-    left:0;
-    height:2px;
-    width:50%;
-  }
 
-  /* ここが効きます：パネルは常にブロック要素＆改行 */
-  .follow-tabs .tabpanel {
-    display:block !important;
-    clear:both;                  /* 横並び化を明示解除 */
-    margin-top:6px;
-  }
-
-  /* ステータス行も見出しの下に置く */
-  .follow-tabs .follow-stats.under {
-    display:block;
-    margin:6px 0 10px;
-    clear:both;
-  }
-
-  /* 念のため、リスト自体も縦積み */
-  #followingList, #followersList {
-    display:block;
-  }
-</style>
+    /* --- フォロー一覧をタブの「下」に縦積み表示させる強制レイアウト --- */
+    .follow-tabs{ 
+      display:block !important;
+      align-items:unset !important;
+      justify-content:unset !important;
+    }
+    .follow-tabs .tabbar{
+      display:flex !important;
+      gap:12px;
+      align-items:center;
+      margin-bottom:8px;
+      position:relative;
+    }
+    .follow-tabs .tab-underline{
+      position:absolute;
+      bottom:-2px;
+      left:0;
+      height:2px;
+      width:50%;
+    }
+    .follow-tabs .tabpanel{
+      display:block !important;
+      width:100% !important;
+      clear:both !important;
+      margin-top:6px;
+    }
+    .follow-tabs .follow-stats.under{
+      display:block !important;
+      margin:6px 0 10px;
+      clear:both !important;
+    }
+    #followingList, #followersList{ display:block !important; }
+  </style>
 </head>
 <body>
   <header>
@@ -84,9 +81,8 @@
   </header>
 
   <main style="padding-bottom:90px">
-    <!-- 自分のプロフィール（表示モード＋編集モード） -->
+    <!-- 自分のプロフィール -->
     <div class="card form">
-      <!-- 表示モード -->
       <div id="profileView">
         <div class="row">
           <div class="avatar-wrap">
@@ -99,54 +95,7 @@
             <p id="profileAgeShow" class="meta">年齢: —</p>
             <p id="profileBioShow" class="bio">自己紹介: —</p>
           </div>
-          <div class="right">
-            <button id="editProfileBtn" class="btn">編集</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 編集モード（初期は非表示） -->
-      <div id="profileEdit" style="display:none;">
-        <div class="row">
-          <div class="avatar-wrap">
-            <img id="profileAvatarPreview" class="avatar" src="images/default-avatar.png" alt="avatar"
-                 onerror="this.onerror=null;this.src='images/default-avatar.png';">
-            <label class="btn">
-              プロフィール画像設定
-              <input id="profileAvatarInput" type="file" accept="image/*" style="display:none">
-            </label>
-          </div>
-          <div class="field">
-            <label>ニックネーム</label>
-            <input id="profileNickname" type="text" placeholder="例）zange太郎">
-          </div>
-          <div class="field" style="max-width:140px">
-            <label>性別</label>
-            <select id="profileGender">
-              <option value="">未選択</option>
-              <option>男性</option>
-              <option>女性</option>
-              <option>その他</option>
-              <option>回答しない</option>
-            </select>
-          </div>
-          <div class="field" style="max-width:140px">
-            <label>年齢</label>
-            <select id="profileAge">
-              <option value="">未選択</option>
-              <option>〜19</option><option>20-24</option><option>25-29</option>
-              <option>30-34</option><option>35-39</option><option>40-44</option>
-              <option>45-49</option><option>50-59</option><option>60+</option>
-            </select>
-          </div>
-          <div class="field" style="flex-basis:100%">
-            <label>プロフィール</label>
-            <textarea id="profileBio" rows="3" placeholder="ひとこと自己紹介"></textarea>
-          </div>
-        </div>
-        <div class="btn-row">
-          <button id="profileSaveBtn" class="btn primary">保存</button>
-          <button id="profileCancelBtn" class="btn">キャンセル</button>
+          <div class="right"><button id="editProfileBtn" class="btn">編集</button></div>
         </div>
       </div>
     </div>
@@ -161,13 +110,10 @@
                   aria-selected="true" aria-controls="pane-following">フォロー中</button>
           <span class="tab-underline" aria-hidden="true"></span>
         </div>
-
         <div id="followStats" class="follow-stats under"></div>
-
         <div id="pane-following" class="tabpanel show" role="tabpanel" aria-labelledby="tab-following">
           <div id="followingList"></div>
         </div>
-
         <div id="pane-followers" class="tabpanel" role="tabpanel" aria-labelledby="tab-followers" hidden>
           <div id="followersList"></div>
         </div>
@@ -189,7 +135,7 @@
       <a href="index.html"><span class="icon">🏠</span><span class="label">ホーム</span></a>
       <a href="topics.html"><span class="icon">🎯</span><span class="label">お題</span></a>
       <a href="notifications.html" class="nav-link nav-bell">
-        <span class="icon-row"><span class="icon">🔔</span><span id="notifBadge" class="notif-badge" aria-label="未読通知数"></span></span>
+        <span class="icon-row"><span class="icon">🔔</span><span id="notifBadge" class="notif-badge"></span></span>
         <span class="label">通知</span>
       </a>
       <a href="settings.html"><span class="icon">⚙️</span><span class="label">設定</span></a>
@@ -198,53 +144,33 @@
   </footer>
   <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
 
-  <!-- 既存ロジック（users/following/Followers を管理） -->
   <script src="script.js"></script>
-
-  <!-- ページ固有の最小 JS：ログイン表示 & フォロー一覧の再描画 -->
   <script>
     async function renderUserIcon(){
-      const box = document.getElementById("currentUserIcon");
-      if (!box) return;
+      const box=document.getElementById("currentUserIcon");
+      if(!box)return;
       try{
-        const res = await fetch("/api/me",{ credentials:"include", cache:"no-store" });
-        const data = await res.json();
-        if (data.ok && data.user){
-          const esc = s => (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[m]));
-          const name = data.user.nickname || data.user.email;
-          box.innerHTML = `<span class="pill">👤 ${esc(name)}</span>`;
-        }else{
-          box.innerHTML = `<a href="login.html">ログイン</a>`;
-        }
-      }catch{
-        box.innerHTML = `<a href="login.html">ログイン</a>`;
-      }
+        const res=await fetch("/api/me",{credentials:"include",cache:"no-store"});
+        const data=await res.json();
+        if(data.ok&&data.user){
+          const esc=s=>(s||'').replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[m]));
+          const name=data.user.nickname||data.user.email;
+          box.innerHTML=`<span class="pill">👤 ${esc(name)}</span>`;
+        }else{box.innerHTML=`<a href="login.html">ログイン</a>`;}
+      }catch{box.innerHTML=`<a href="login.html">ログイン</a>`;}
     }
 
-    document.addEventListener("DOMContentLoaded", () => {
-      // ヘッダーのログイン表示
+    document.addEventListener("DOMContentLoaded",()=>{
       renderUserIcon();
-
-      // ★ 重要：サーバーのアクティブユーザー(email) → ローカル users/auth へ同期
-      if (typeof ensureLocalAuthFromActiveOwner === "function") {
-        ensureLocalAuthFromActiveOwner();
-      }
-
-      // ★ 同期直後にフォロー欄を確実に描画（レンダリング順のズレ対策で 0ms ディレイ）
-      setTimeout(() => {
-        if (typeof renderFollowBoxesSafe === "function") renderFollowBoxesSafe();
-      }, 0);
-
-      // ★ 別タブ/他ページでの変更も即時反映（フォロー操作・プロフィール更新など）
-      window.addEventListener("storage", (e) => {
-        if (!e.key) return;
-        if (e.key === "users" || e.key === "authUserId" || e.key === "profile" || (e.key||"").startsWith("profile:")) {
-          if (typeof renderFollowBoxesSafe === "function") renderFollowBoxesSafe();
+      if(typeof ensureLocalAuthFromActiveOwner==="function"){ensureLocalAuthFromActiveOwner();}
+      setTimeout(()=>{if(typeof renderFollowBoxesSafe==="function")renderFollowBoxesSafe();},0);
+      window.addEventListener("storage",e=>{
+        if(!e.key)return;
+        if(e.key==="users"||e.key==="authUserId"||e.key==="profile"||(e.key||"").startsWith("profile:")){
+          if(typeof renderFollowBoxesSafe==="function")renderFollowBoxesSafe();
         }
       });
     });
-
-    /* タブ切替は script.js の initFollowTabs が面倒を見ます */
   </script>
 
   <footer>&copy; 2025 zange (テスト公開中)</footer>
