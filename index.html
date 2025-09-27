@@ -92,46 +92,53 @@
   <!-- 既存の中核ロジック -->
   <script src="script.js"></script>
 
-  <!-- このページ固有：投稿取得＋フォローボタン（script.js のフォロー機構を利用） -->
+  <!-- このページ固有 -->
   <script>
+    const AVA_FALLBACK_URL = "images/default-avatar.png";
+    const AVA_FALLBACK_DATAURI =
+      'data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 84 84"><circle cx="42" cy="42" r="42" fill="%23f1f5f9"/><circle cx="42" cy="34" r="14" fill="%23cbd5e1"/><rect x="16" y="52" width="52" height="20" rx="10" fill="%23cbd5e1"/></svg>';
+
     function escapeHTML(s){return (s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
     function fmtDate(iso){const d=new Date(iso||'');if(isNaN(d))return'';return `${d.getFullYear()}/${('0'+(d.getMonth()+1)).slice(-2)}/${('0'+d.getDate()).slice(-2)}`}
     function resolveBgUrl(bg){if(!bg)return'';if(/^https?:/i.test(bg))return bg;return'images/'+String(bg).replace(/^\/+/,'')}
 
-    // ===== API =====
     async function loadPosts(){
       const res = await fetch('/api/posts',{credentials:'include', cache:'no-store'});
       const data = await res.json().catch(()=>[]);
       return Array.isArray(data) ? data : [];
     }
 
-    // ===== フォローUI（script.js の users/following を使用） =====
-    function resolveTargetIdByAuthor(author){
-      if (!author) return null;
-      // script.js にある util を利用（なければ null）
-      if (typeof ensureUserIdForNickname === 'function') {
-        return ensureUserIdForNickname(String(author));
-      }
-      return null;
+    // ニックネームからアバター一覧を取得
+    async function fetchAvatarsByNicknames(nicks){
+      if(!nicks.length) return {};
+      try{
+        const q=encodeURIComponent(nicks.join(","));
+        const res=await fetch(`/api/users?nicknames=${q}`,{credentials:"include",cache:"no-store"});
+        if(!res.ok) return {};
+        const data=await res.json();
+        const list=data.users||data||[];
+        const map={};
+        (list||[]).forEach(u=>{
+          const k=(u.nickname||u.name||"").trim();
+          if(k) map[k]=u.avatar||"";
+        });
+        return map;
+      }catch(e){console.warn(e);return {}}
     }
 
     function renderFollowButtonByAuthor(author){
-      const targetId = resolveTargetIdByAuthor(author);
-      const me = (typeof getAuthUser === 'function') ? getAuthUser() : null;
-
-      // 自分のカードなら非表示
-      if (!targetId || (me && String(me.profile?.nickname||me.email||'') === String(author))) return '';
-
-      const following = me ? ((me.following||[]).includes(targetId)) : false;
-      const cls  = following ? 'follow-btn following' : 'follow-btn';
-      const text = following ? 'フォロー中' : 'フォローする';
-      return `<button type="button" class="${cls}" data-follow-user="${escapeHTML(targetId)}">${text}</button>`;
+      const me=(typeof getAuthUser==="function")?getAuthUser():null;
+      if(me && String(me.profile?.nickname||me.email||"")===String(author)) return '';
+      return ''; // 今はボタン非表示（必要なら戻す）
     }
 
-    // ==== 投稿描画 ====
-    function renderPosts(posts){
+    async function renderPosts(posts){
       const host=document.getElementById('timeline');host.innerHTML='';
       const kw=(document.getElementById('kw')?.value||'').trim().toLowerCase();
+
+      // 先に全著者を集めてアバター解決
+      const authors=Array.from(new Set(posts.map(p=>p.author).filter(Boolean)));
+      const avatarMap=await fetchAvatarsByNicknames(authors);
 
       posts
         .filter(p=>{
@@ -141,15 +148,19 @@
         })
         .forEach(p=>{
           const author=p.author||'匿名';
-          const avatarCh=author[0]||'匿';
           const when=fmtDate(p.createdAt||p.date);
           const card=document.createElement('article');
           card.className='card feed-card';
           card.setAttribute('data-postid',p.id);
 
+          const avatarUrl = p.avatar || avatarMap[author] || AVA_FALLBACK_URL;
+
           card.innerHTML=`
             <div class="feed-head">
-              <div class="feed-avatar">${escapeHTML(avatarCh)}</div>
+              <div class="feed-avatar">
+                <img src="${escapeHTML(avatarUrl)}" alt="${escapeHTML(author)}"
+                  onerror="this.onerror=null;this.src='${AVA_FALLBACK_URL}';this.onerror=function(){this.src='${AVA_FALLBACK_DATAURI}';}">
+              </div>
               <div class="feed-username">${escapeHTML(author)}</div>
               ${renderFollowButtonByAuthor(author)}
             </div>
@@ -172,34 +183,6 @@
           host.appendChild(card);
         });
     }
-
-    // ===== イベント =====
-    document.addEventListener('click', e=>{
-      const btn = e.target.closest('.follow-btn'); 
-      if (!btn) return;
-
-      const targetId = btn.getAttribute('data-follow-user');
-      const me = (typeof getAuthUser === 'function') ? getAuthUser() : null;
-      if (!me){ alert('ログインが必要です'); return; }
-      if (!targetId || String(targetId) === String(me.id)) return;
-
-      // トグル（script.js の関数を使用）
-      if ((me.following||[]).includes(targetId)) {
-        if (typeof unfollowUser === 'function') unfollowUser(targetId);
-      } else {
-        if (typeof followUser === 'function') followUser(targetId);
-      }
-
-      // 同じ相手のボタン表記を一括更新
-      const latestFollowing = (getAuthUser()?.following||[]).includes(targetId);
-      document.querySelectorAll(`button[data-follow-user="${CSS.escape(targetId)}"]`).forEach(b=>{
-        b.classList.toggle('following', latestFollowing);
-        b.textContent = latestFollowing ? 'フォロー中' : 'フォローする';
-      });
-
-      // settings.html の一覧も即反映（あれば）
-      if (typeof renderFollowBoxesSafe === 'function') renderFollowBoxesSafe();
-    });
 
     document.getElementById('kw')?.addEventListener('input', async ()=>{
       const posts = await loadPosts();
