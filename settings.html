@@ -188,12 +188,12 @@
         const data=await res.json();
         if(data.ok&&data.user){
           const name=data.user.nickname||data.user.email;
-          box.innerHTML=<span class="pill">👤 ${esc(name)}</span>;
+          box.innerHTML=`<span class="pill">👤 ${esc(name)}</span>`;
         }else{
-          box.innerHTML=<a href="login.html">ログイン</a>;
+          box.innerHTML=`<a href="login.html">ログイン</a>`;
         }
       }catch{
-        box.innerHTML=<a href="login.html">ログイン</a>;
+        box.innerHTML=`<a href="login.html">ログイン</a>`;
       }
     }
 
@@ -209,9 +209,9 @@
         const b=document.getElementById("profileBioShow");
         if(a && p.avatar){ a.src=p.avatar; }
         if(n){ n.textContent=p.nickname||"匿名"; }
-        if(g){ g.textContent=性別: ${p.gender||"—"}; }
-        if(ag){ ag.textContent=年齢: ${p.age||"—"}; }
-        if(b){ b.textContent=自己紹介: ${p.bio||"—"}; }
+        if(g){ g.textContent=`性別: ${p.gender||"—"}`; }
+        if(ag){ ag.textContent=`年齢: ${p.age||"—"}`; }
+        if(b){ b.textContent=`自己紹介: ${p.bio||"—"}`; }
       }catch(_){}
     }
 
