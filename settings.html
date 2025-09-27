@@ -175,10 +175,12 @@
 
   <!-- ページ固有：ログイン表示 + プロフィール即時ブースト + フォロー欄への顔写真追加 -->
   <script>
-    function esc(s){return (s||'').replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;","&gt;":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
-    const AVA_FALLBACK = "images/default-avatar.png";
+    function esc(s){return (s||'').replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
+    const AVA_FALLBACK_URL = "images/default-avatar.png";
+    const AVA_FALLBACK_DATAURI =
+      'data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 84 84"><circle cx="42" cy="42" r="42" fill="%23f1f5f9"/><circle cx="42" cy="34" r="14" fill="%23cbd5e1"/><rect x="16" y="52" width="52" height="20" rx="10" fill="%23cbd5e1"/></svg>';
 
-    // 1) ヘッダーのログイン表示
+    // 1) ヘッダーのログイン表示（テンプレ直し済み）
     async function renderUserIcon(){
       const box=document.getElementById("currentUserIcon"); if(!box) return;
       try{
@@ -195,7 +197,7 @@
       }
     }
 
-    // 2) 表示欄を即時に埋める（initProfileUI の前に一回描画）
+    // 2) 自分のプロフィール欄を即描画（テンプレ直し済み）
     function bootstrapProfileView(){
       try{
         if(typeof getProfile!=="function") return;
@@ -213,48 +215,100 @@
       }catch(_){}
     }
 
-    // 3) フォロー欄に顔写真を追加（既存renderFollowBoxesSafeの結果に対して後付け）
+    // ---- ここから顔写真の後付けロジック ----
+    function findAvatarByNickname(nickname){
+      if(!nickname) return null;
+
+      // 1) getUsers() があればそれを優先
+      try{
+        if(typeof getUsers==="function"){
+          const us=getUsers()||[];
+          const u=us.find(u=> (u.profile?.nickname||u.email) === nickname );
+          if(u && u.profile?.avatar) return u.profile.avatar;
+        }
+      }catch(_){}
+
+      // 2) localStorage users
+      try{
+        const users=JSON.parse(localStorage.getItem("users")||"{}");
+        for(const uid in users){
+          const prof=users[uid]?.profile;
+          const name=(prof?.nickname)||users[uid]?.email;
+          if(name===nickname && prof?.avatar) return prof.avatar;
+        }
+      }catch(_){}
+
+      // 3) profile:<uid> スキャン（ニックネーム一致）
+      try{
+        for(let i=0;i<localStorage.length;i++){
+          const k=localStorage.key(i)||"";
+          if(!k.startsWith("profile:")) continue;
+          const p=JSON.parse(localStorage.getItem(k)||"{}");
+          const name=p?.nickname||p?.email;
+          if(name===nickname && p?.avatar) return p.avatar;
+        }
+      }catch(_){}
+
+      return null;
+    }
+
+    // 行要素から「名前らしき」文字列を抽出（ボタンや画像は除外）
+    function extractNicknameFromRow(row){
+      // attribute 優先
+      const byAttr = row.getAttribute?.("data-nickname");
+      if(byAttr) return byAttr.trim();
+
+      // よくあるクラス名
+      const byClass = row.querySelector?.(".name,.nickname,.follow-name");
+      if(byClass && byClass.textContent) return byClass.textContent.trim();
+
+      // だめならテキストから「外す」「削除」などのボタン文字を取り除く
+      const clone = row.cloneNode(true);
+      clone.querySelectorAll("button,img,svg").forEach(el=>el.remove());
+      const t = (clone.textContent||"").replace(/外す|削除|フォロー中|フォロワー|なし/g,"").trim();
+      return t || null;
+    }
+
+    // リストの <img> を補正・差し替え
     function enhanceFollowLists(){
-      const users=JSON.parse(localStorage.getItem("users")||"{}");
-      const meId=localStorage.getItem("authUserId");
-      if(!meId) return;
-
       ["followingList","followersList"].forEach(listId=>{
-        const box=document.getElementById(listId);
-        if(!box) return;
+        const box=document.getElementById(listId); if(!box) return;
 
-        // 既存の行（script.js 側で data-uid を付与している想定）
-        box.querySelectorAll("[data-uid]").forEach(row=>{
-          const uid=row.getAttribute("data-uid");
-          if(!uid) return;
+        // 行＝直下の子要素をざっくり全部見る（既存DOMを壊さない）
+        Array.from(box.children).forEach(row=>{
+          if(!(row && row.nodeType===1)) return;
 
-          // すでに画像が入っていたら何もしない（多重追加防止）
-          if(row.querySelector("img.avatar-sm")) return;
+          // 画像要素を確保（無ければ先頭に作る）
+          let img = row.querySelector("img");
+          if(!img){
+            img = document.createElement("img");
+            img.alt="";
+            img.style.cssText="width:28px;height:28px;border-radius:50%;object-fit:cover;margin-right:6px;flex:0 0 auto;";
+            row.insertBefore(img, row.firstChild);
+          }
 
-          // プロフィール解決（profile:<uid> → users[uid].profile.avatar の順）
-          let avatar=AVA_FALLBACK;
-          try{
-            const p=JSON.parse(localStorage.getItem("profile:"+uid)||"{}");
-            if(p && p.avatar){ avatar=p.avatar; }
-            else if(users[uid] && users[uid].profile && users[uid].profile.avatar){
-              avatar=users[uid].profile.avatar;
-            }
-          }catch(_){}
+          // どんな場合でも onerror で最終デフォルトに倒す
+          img.onerror = ()=>{ img.onerror=null; img.src = AVA_FALLBACK_URL; img.onerror=()=>{ img.src=AVA_FALLBACK_DATAURI; }; };
 
-          const img=document.createElement("img");
-          img.src=avatar;
-          img.onerror=()=>{ img.src=AVA_FALLBACK; };
-          img.alt="";
-          img.className="avatar-sm";
-          img.style.cssText="width:28px;height:28px;border-radius:50%;object-fit:cover;margin-right:6px";
+          // 既存が API ドメイン /images/default-avatar.png などならローカルに置き換え
+          if(!img.src || /\/images\/default-avatar\.png/i.test(img.src) || /onrender\.com\/images\/default-avatar\.png/i.test(img.src)){
+            img.src = AVA_FALLBACK_URL;
+          }
 
-          // 行の先頭に追加（テキストや「外す」ボタンはそのまま）
-          row.prepend(img);
+          // ニックネームからアバターを解決
+          const nickname = extractNicknameFromRow(row);
+          const found = findAvatarByNickname(nickname);
+          if(found){
+            if(img.src !== found) img.src = found;
+          }else{
+            // 見つからなくても最低限ローカルのデフォルトを使う（404しない）
+            img.src = AVA_FALLBACK_URL;
+          }
         });
       });
     }
 
-    // 4) 初期化の順番を保証
+    // ---- 初期化順序を揃える ----
     document.addEventListener("DOMContentLoaded", ()=>{
       renderUserIcon();
       bootstrapProfileView();
@@ -262,17 +316,25 @@
       // サーバーログイン→ローカル同期（存在すれば）
       if(typeof ensureLocalAuthFromActiveOwner==="function") ensureLocalAuthFromActiveOwner();
 
-      // 既存の初期化（二重呼び出しでも安全な設計を想定）
+      // 既存の初期化
       if(typeof initProfileUI==="function") initProfileUI();
       if(typeof renderFollowBoxesSafe==="function") renderFollowBoxesSafe();
 
-      // 顔写真の後付け（描画完了を待ってから）
-      setTimeout(enhanceFollowLists, 100);
+      // 顔写真の後付け（描画後に確実に走らせる）
+      setTimeout(enhanceFollowLists, 80);
 
-      // 他タブ・他ページで変更された場合も追随
-      window.addEventListener("storage", (e)=>{
+      // タブ切替やフォロー操作でリストが差し替わる想定 → 監視して再適用
+      ["followingList","followersList"].forEach(id=>{
+        const el=document.getElementById(id);
+        if(!el) return;
+        const mo=new MutationObserver(()=>enhanceFollowLists());
+        mo.observe(el,{childList:true,subtree:false});
+      });
+
+      // 他タブ・他ページからの変更にも追随
+      window.addEventListener("storage",(e)=>{
         if(!e.key) return;
-        if(e.key==="users" || e.key==="authUserId" || e.key==="profile" || (e.key||"").startsWith("profile:")){
+        if(e.key==="users"||e.key==="authUserId"||e.key==="profile"||(e.key||"").startsWith("profile:")){
           if(typeof renderFollowBoxesSafe==="function") renderFollowBoxesSafe();
           setTimeout(enhanceFollowLists, 50);
         }
