@@ -173,68 +173,14 @@
   <!-- 既存ロジック（users/following/Followers / initProfileUI など） -->
   <script src="script.js"></script>
 
-  <!-- ページ固有：ログイン表示 + プロフィール同期 + 顔写真補正 -->
+  <!-- ページ固有：ログイン表示 + プロフィール即時ブースト + フォロー欄への顔写真追加 -->
   <script>
     function esc(s){return (s||'').replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
     const AVA_FALLBACK_URL = "images/default-avatar.png";
     const AVA_FALLBACK_DATAURI =
       'data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 84 84"><circle cx="42" cy="42" r="42" fill="%23f1f5f9"/><circle cx="42" cy="34" r="14" fill="%23cbd5e1"/><rect x="16" y="52" width="52" height="20" rx="10" fill="%23cbd5e1"/></svg>';
 
-    /* ---------- /api/me から現在ユーザーを localStorage に同期 ---------- */
-    async function syncProfileFromServer(){
-      try{
-        const res = await fetch("/api/me", { credentials:"include", cache:"no-store" });
-        const data = await res.json();
-        if(!(data && data.ok && data.user)) return;
-
-        const user = data.user;
-        // id（なければ email を代用）
-        const uid = String(user.id || user.uid || user.email || "").trim();
-        if(!uid) return;
-
-        // authUserId を現在のユーザーに更新
-        localStorage.setItem("authUserId", uid);
-
-        // プロフィール（サーバー→ローカル）
-        const prof = {
-          nickname: user.nickname || user.name || user.email || "",
-          avatar  : user.avatar || "",
-          bio     : user.bio || "",
-          gender  : user.gender || "",
-          age     : user.age || ""
-        };
-        localStorage.setItem(`profile:${uid}`, JSON.stringify(prof));
-
-        // 互換：既存実装が参照する可能性のある "profile" にも同じものを入れておく
-        localStorage.setItem("profile", JSON.stringify(prof));
-      }catch(e){
-        console.warn("syncProfileFromServer failed:", e);
-      }
-    }
-
-    /* ---------- 現在ログイン中ユーザーのプロフィールを取得（uid優先） ---------- */
-    function getActiveProfile(){
-      try{
-        const uid = localStorage.getItem("authUserId") || "";
-        if(uid){
-          const s = localStorage.getItem(`profile:${uid}`);
-          if(s){ return JSON.parse(s); }
-        }
-      }catch(_){}
-      // フォールバック（既存の getProfile があればそれも使う）
-      try{
-        if(typeof getProfile === "function"){
-          return getProfile() || {};
-        }
-      }catch(_){}
-      try{
-        const s = localStorage.getItem("profile");
-        if(s) return JSON.parse(s);
-      }catch(_){}
-      return {};
-    }
-
-    /* ---------- ヘッダーのログイン表示 ---------- */
+    // 1) ヘッダーのログイン表示（テンプレ直し済み）
     async function renderUserIcon(){
       const box=document.getElementById("currentUserIcon"); if(!box) return;
       try{
@@ -242,19 +188,20 @@
         const data=await res.json();
         if(data.ok&&data.user){
           const name=data.user.nickname||data.user.email;
-          box.innerHTML=`<span class="pill">👤 ${esc(name)}</span>`;
+          box.innerHTML=<span class="pill">👤 ${esc(name)}</span>;
         }else{
-          box.innerHTML=`<a href="login.html">ログイン</a>`;
+          box.innerHTML=<a href="login.html">ログイン</a>;
         }
       }catch{
-        box.innerHTML=`<a href="login.html">ログイン</a>`;
+        box.innerHTML=<a href="login.html">ログイン</a>;
       }
     }
 
-    /* ---------- プロフィール欄を即時描画（uidベース） ---------- */
+    // 2) 自分のプロフィール欄を即描画（テンプレ直し済み）
     function bootstrapProfileView(){
       try{
-        const p = getActiveProfile() || {};
+        if(typeof getProfile!=="function") return;
+        const p=getProfile()||{};
         const a=document.getElementById("profileAvatarShow");
         const n=document.getElementById("profileNameShow");
         const g=document.getElementById("profileGenderShow");
@@ -262,15 +209,17 @@
         const b=document.getElementById("profileBioShow");
         if(a && p.avatar){ a.src=p.avatar; }
         if(n){ n.textContent=p.nickname||"匿名"; }
-        if(g){ g.textContent=`性別: ${p.gender||"—"}`; }
-        if(ag){ ag.textContent=`年齢: ${p.age||"—"}`; }
-        if(b){ b.textContent=`自己紹介: ${p.bio||"—"}`; }
+        if(g){ g.textContent=性別: ${p.gender||"—"}; }
+        if(ag){ ag.textContent=年齢: ${p.age||"—"}; }
+        if(b){ b.textContent=自己紹介: ${p.bio||"—"}; }
       }catch(_){}
     }
 
-    /* ---------- フォロー欄の顔写真補正（既存のまま） ---------- */
+    // ---- ここから顔写真の後付けロジック ----
     function findAvatarByNickname(nickname){
       if(!nickname) return null;
+
+      // 1) getUsers() があればそれを優先
       try{
         if(typeof getUsers==="function"){
           const us=getUsers()||[];
@@ -278,6 +227,8 @@
           if(u && u.profile?.avatar) return u.profile.avatar;
         }
       }catch(_){}
+
+      // 2) localStorage users
       try{
         const users=JSON.parse(localStorage.getItem("users")||"{}");
         for(const uid in users){
@@ -286,6 +237,8 @@
           if(name===nickname && prof?.avatar) return prof.avatar;
         }
       }catch(_){}
+
+      // 3) profile:<uid> スキャン（ニックネーム一致）
       try{
         for(let i=0;i<localStorage.length;i++){
           const k=localStorage.key(i)||"";
@@ -295,25 +248,37 @@
           if(name===nickname && p?.avatar) return p.avatar;
         }
       }catch(_){}
+
       return null;
     }
 
+    // 行要素から「名前らしき」文字列を抽出（ボタンや画像は除外）
     function extractNicknameFromRow(row){
+      // attribute 優先
       const byAttr = row.getAttribute?.("data-nickname");
       if(byAttr) return byAttr.trim();
+
+      // よくあるクラス名
       const byClass = row.querySelector?.(".name,.nickname,.follow-name");
       if(byClass && byClass.textContent) return byClass.textContent.trim();
+
+      // だめならテキストから「外す」「削除」などのボタン文字を取り除く
       const clone = row.cloneNode(true);
       clone.querySelectorAll("button,img,svg").forEach(el=>el.remove());
       const t = (clone.textContent||"").replace(/外す|削除|フォロー中|フォロワー|なし/g,"").trim();
       return t || null;
     }
 
+    // リストの <img> を補正・差し替え
     function enhanceFollowLists(){
       ["followingList","followersList"].forEach(listId=>{
         const box=document.getElementById(listId); if(!box) return;
+
+        // 行＝直下の子要素をざっくり全部見る（既存DOMを壊さない）
         Array.from(box.children).forEach(row=>{
           if(!(row && row.nodeType===1)) return;
+
+          // 画像要素を確保（無ければ先頭に作る）
           let img = row.querySelector("img");
           if(!img){
             img = document.createElement("img");
@@ -321,47 +286,55 @@
             img.style.cssText="width:28px;height:28px;border-radius:50%;object-fit:cover;margin-right:6px;flex:0 0 auto;";
             row.insertBefore(img, row.firstChild);
           }
+
+          // どんな場合でも onerror で最終デフォルトに倒す
           img.onerror = ()=>{ img.onerror=null; img.src = AVA_FALLBACK_URL; img.onerror=()=>{ img.src=AVA_FALLBACK_DATAURI; }; };
+
+          // 既存が API ドメイン /images/default-avatar.png などならローカルに置き換え
           if(!img.src || /\/images\/default-avatar\.png/i.test(img.src) || /onrender\.com\/images\/default-avatar\.png/i.test(img.src)){
             img.src = AVA_FALLBACK_URL;
           }
+
+          // ニックネームからアバターを解決
           const nickname = extractNicknameFromRow(row);
           const found = findAvatarByNickname(nickname);
-          if(found){ if(img.src !== found) img.src = found; } else { img.src = AVA_FALLBACK_URL; }
+          if(found){
+            if(img.src !== found) img.src = found;
+          }else{
+            // 見つからなくても最低限ローカルのデフォルトを使う（404しない）
+            img.src = AVA_FALLBACK_URL;
+          }
         });
       });
     }
 
-    /* ---------- 初期化順序 ---------- */
-    document.addEventListener("DOMContentLoaded", async ()=>{
-      // 1) サーバー真実値で localStorage を上書き
-      await syncProfileFromServer();
-
-      // 2) 表示系
+    // ---- 初期化順序を揃える ----
+    document.addEventListener("DOMContentLoaded", ()=>{
       renderUserIcon();
       bootstrapProfileView();
 
-      // 3) サーバーのアクティブユーザー→ローカル同期（既存があれば）
+      // サーバーログイン→ローカル同期（存在すれば）
       if(typeof ensureLocalAuthFromActiveOwner==="function") ensureLocalAuthFromActiveOwner();
 
-      // 4) 既存の初期化
+      // 既存の初期化
       if(typeof initProfileUI==="function") initProfileUI();
       if(typeof renderFollowBoxesSafe==="function") renderFollowBoxesSafe();
 
-      // 5) 顔写真の後付け
+      // 顔写真の後付け（描画後に確実に走らせる）
       setTimeout(enhanceFollowLists, 80);
 
-      // 6) 変更監視
+      // タブ切替やフォロー操作でリストが差し替わる想定 → 監視して再適用
       ["followingList","followersList"].forEach(id=>{
         const el=document.getElementById(id);
         if(!el) return;
         const mo=new MutationObserver(()=>enhanceFollowLists());
         mo.observe(el,{childList:true,subtree:false});
       });
+
+      // 他タブ・他ページからの変更にも追随
       window.addEventListener("storage",(e)=>{
         if(!e.key) return;
         if(e.key==="users"||e.key==="authUserId"||e.key==="profile"||(e.key||"").startsWith("profile:")){
-          bootstrapProfileView();
           if(typeof renderFollowBoxesSafe==="function") renderFollowBoxesSafe();
           setTimeout(enhanceFollowLists, 50);
         }
