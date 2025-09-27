@@ -170,18 +170,18 @@
   </footer>
   <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
 
-  <!-- 既存ロジック（users/following/Followers / initProfileUI など） -->
+  <!-- 既存ロジック -->
   <script src="script.js"></script>
 
-  <!-- ページ固有：サーバー真実値で同期（localStorage へ書かない）＋ 顔写真補正 -->
+  <!-- ページ固有：サーバー真実値で同期（localStorage 不使用）＋ renderMyPosts をサーバー優先にパッチ -->
   <script>
     const AVA_FALLBACK_URL = "images/default-avatar.png";
     const AVA_FALLBACK_DATAURI =
       'data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 84 84"><circle cx="42" cy="42" r="42" fill="%23f1f5f9"/><circle cx="42" cy="34" r="14" fill="%23cbd5e1"/><rect x="16" y="52" width="52" height="20" rx="10" fill="%23cbd5e1"/></svg>';
 
-    function esc(s){return (s||'').replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
+    function esc(s){return (s||'').replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;"," >":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
 
-    /* ---------- サーバーから現在ユーザーを取得（localStorage へは書かない） ---------- */
+    /* ===== 共通：現在ユーザー ===== */
     async function fetchActiveUser(){
       try{
         const res = await fetch("/api/me",{credentials:"include",cache:"no-store"});
@@ -190,7 +190,15 @@
       }catch(e){ console.warn("fetchActiveUser failed:", e); return null; }
     }
 
-    /* ---------- プロフィール描画（サーバー値のみ） ---------- */
+    /* ===== ヘッダーのログイン表示 ===== */
+    async function renderUserIcon(){
+      const box=document.getElementById("currentUserIcon"); if(!box) return;
+      const user = await fetchActiveUser();
+      if(user){ box.innerHTML=`<span class="pill">👤 ${esc(user.nickname||user.email||"")}</span>`; }
+      else{ box.innerHTML=`<a href="login.html">ログイン</a>`; }
+    }
+
+    /* ===== プロフィール描画（サーバー値のみ） ===== */
     async function renderProfileFromServer(){
       const user = await fetchActiveUser();
       const a=document.getElementById("profileAvatarShow");
@@ -200,19 +208,19 @@
       const b=document.getElementById("profileBioShow");
 
       if(!user){
-        if(n) n.textContent = "匿名";
-        if(g) g.textContent = "性別: —";
-        if(ag) ag.textContent = "年齢: —";
-        if(b) b.textContent = "自己紹介: —";
+        if(n) n.textContent="匿名";
+        if(g) g.textContent="性別: —";
+        if(ag) ag.textContent="年齢: —";
+        if(b) b.textContent="自己紹介: —";
         return;
       }
-      if(a){ a.onerror=()=>{ a.src=AVA_FALLBACK_URL; a.onerror=()=>{a.src=AVA_FALLBACK_DATAURI}; }; a.src = user.avatar || AVA_FALLBACK_URL; }
-      if(n){ n.textContent = user.nickname || user.name || user.email || "匿名"; }
-      if(g){ g.textContent = "性別: " + (user.gender || "—"); }
-      if(ag){ ag.textContent = "年齢: " + (user.age || "—"); }
-      if(b){ b.textContent = "自己紹介: " + (user.bio || "—"); }
+      if(a){ a.onerror=()=>{ a.onerror=null; a.src=AVA_FALLBACK_URL; a.onerror=()=>{a.src=AVA_FALLBACK_DATAURI}; }; a.src=user.avatar||AVA_FALLBACK_URL; }
+      if(n) n.textContent = user.nickname || user.name || user.email || "匿名";
+      if(g) g.textContent = "性別: " + (user.gender || "—");
+      if(ag) ag.textContent = "年齢: " + (user.age || "—");
+      if(b) b.textContent = "自己紹介: " + (user.bio || "—");
 
-      // 編集フォーム初期値（既存 UI を尊重）
+      // 編集フォーム初期値（空欄のみ埋める）
       const nickI=document.getElementById("profileNickname");
       const genI=document.getElementById("profileGender");
       const ageI=document.getElementById("profileAge");
@@ -225,43 +233,52 @@
       if(prev && user.avatar) prev.src = user.avatar;
     }
 
-    /* ---------- 自分の投稿（サーバー値のみ） ---------- */
+    /* ===== 自分の投稿（サーバー値のみ） ===== */
+    function fallbackRenderMyPosts(posts){
+      const box = document.getElementById("myPostsList");
+      if(!box) return;
+      box.innerHTML = (posts||[]).map(p=>`
+        <article class="card my-post" data-id="${esc(String(p.id||""))}">
+          <div><strong>${esc(p.text||"")}</strong></div>
+          <div class="muted" style="margin-top:4px">${esc(p.target||"—")} ／ ${esc((p.tags||[]).join(",")||"—")}</div>
+        </article>
+      `).join("");
+    }
+
+    // script.js の renderMyPosts を「サーバー優先」でラップ（既存仕様は維持）
+    (function patchRenderMyPosts(){
+      const orig = window.renderMyPosts;
+      window.renderMyPosts = async function(arg){
+        try{
+          // 引数で配列が来たらそのまま既存へ（既存 UI を尊重）
+          if(Array.isArray(arg)){
+            if(typeof orig === "function"){ return orig(arg); }
+            return fallbackRenderMyPosts(arg);
+          }
+          // 引数なし等：必ずサーバーから取得して渡す（localStorage を無視）
+          const res = await fetch("/api/posts?mine=1",{credentials:"include",cache:"no-store"});
+          const data = await res.json();
+          const posts = (data && (data.posts||data)) || [];
+          if(typeof orig === "function"){ return orig(posts); }
+          return fallbackRenderMyPosts(posts);
+        }catch(e){
+          console.warn("renderMyPosts (patched) failed:", e);
+        }
+      };
+    })();
+
     async function renderMyPostsFromServer(){
       try{
         const res = await fetch("/api/posts?mine=1",{credentials:"include",cache:"no-store"});
         const data = await res.json();
-        if(!(data && (data.ok===undefined || data.ok===true))) return;
-        const posts = data.posts || data; // API が配列直接返す場合に対応
-
-        if(typeof renderMyPosts === "function"){
-          renderMyPosts(posts);
-          return;
-        }
-        // 簡易描画（既存と衝突しないよう最小）
-        const box = document.getElementById("myPostsList");
-        if(!box) return;
-        box.innerHTML = (posts||[]).map(p=>`
-          <article class="card my-post" data-id="${esc(String(p.id||""))}">
-            <div><strong>${esc(p.text||"")}</strong></div>
-            <div class="muted" style="margin-top:4px">${esc(p.target||"—")} ／ ${esc((p.tags||[]).join(",")||"—")}</div>
-          </article>
-        `).join("");
+        const posts = (data && (data.posts||data)) || [];
+        // 上書き済み renderMyPosts を経由して描画（既存UI維持）
+        if(typeof window.renderMyPosts === "function") return window.renderMyPosts(posts);
+        return fallbackRenderMyPosts(posts);
       }catch(e){ console.warn("renderMyPostsFromServer failed:", e); }
     }
 
-    /* ---------- ヘッダーのログイン表示（サーバー値のみ） ---------- */
-    async function renderUserIcon(){
-      const box=document.getElementById("currentUserIcon"); if(!box) return;
-      const user = await fetchActiveUser();
-      if(user){
-        const name=user.nickname||user.email||"";
-        box.innerHTML=`<span class="pill">👤 ${esc(name)}</span>`;
-      }else{
-        box.innerHTML=`<a href="login.html">ログイン</a>`;
-      }
-    }
-
-    /* ---------- フォロー欄の顔写真補正 ---------- */
+    /* ===== フォロー欄の顔写真（サーバー問い合わせベース／API不在なら既存のまま） ===== */
     function extractNicknameFromRow(row){
       const byAttr = row.getAttribute?.("data-nickname");
       if(byAttr) return byAttr.trim();
@@ -273,8 +290,6 @@
       return t || null;
     }
 
-    // サーバーにニックネームの配列で問い合わせて {nickname, avatar} を返す API を想定
-    // 無ければ失敗しても OK（既存表示のまま）
     async function fetchAvatarsByNicknames(nicks){
       if(!nicks.length) return {};
       const q = encodeURIComponent(nicks.join(","));
@@ -304,8 +319,8 @@
       for(const listId of ids){
         const box=document.getElementById(listId); if(!box) continue;
 
-        // 1) 既存 img の 404/無効 src を安全なデフォルトへ
         const rows = Array.from(box.children).filter(el=>el && el.nodeType===1);
+        // 先に安全なデフォルト
         rows.forEach(row=>{
           let img = row.querySelector("img");
           if(!img){
@@ -315,12 +330,12 @@
             row.insertBefore(img, row.firstChild);
           }
           img.onerror = ()=>{ img.onerror=null; img.src = AVA_FALLBACK_URL; img.onerror=()=>{ img.src=AVA_FALLBACK_DATAURI; }; };
-          if(!img.src || /\/images\/default-avatar\.png/i.test(img.src) || /onrender\.com\/images\/default-avatar\.png/i.test(img.src)){
+          if(!img.src || /\/images\/default-avatar\.png/i.test(img.src)){
             img.src = AVA_FALLBACK_URL;
           }
         });
 
-        // 2) 一括でニックネーム→アバターを問い合わせ（あれば上書き）
+        // 一括問い合わせ（API があれば上書き）
         const names = rows.map(extractNicknameFromRow).filter(Boolean);
         const uniq = Array.from(new Set(names));
         const map = await fetchAvatarsByNicknames(uniq);
@@ -335,17 +350,17 @@
       }
     }
 
-    /* ---------- 初期化：常にサーバー真実値で描画。localStorage は参照も書込みも不要 ---------- */
+    /* ===== 初期化：常にサーバー真実値で描画 ===== */
     document.addEventListener("DOMContentLoaded", async ()=>{
       await renderUserIcon();
       await renderProfileFromServer();
       await renderMyPostsFromServer();
 
-      // 既存の初期化（UI ロジック等）。サーバー描画を壊さない範囲で実行
+      // 既存の初期化（UIロジック維持）
       if(typeof initProfileUI==="function") initProfileUI();
       if(typeof renderFollowBoxesSafe==="function") renderFollowBoxesSafe();
 
-      // 顔写真の後付け（描画後に）
+      // 顔写真の後付け（描画後）
       setTimeout(enhanceFollowLists, 80);
 
       // タブ切替や DOM 置換に対応して再適用
@@ -364,7 +379,7 @@
         setTimeout(enhanceFollowLists, 50);
       });
 
-      // プロフィール保存ボタン（既存サーバー API がある前提）
+      // プロフィール保存（サーバー API 前提・localStorage 不使用）
       const saveBtn=document.getElementById("profileSaveBtn");
       if(saveBtn){
         saveBtn.addEventListener("click", async ()=>{
