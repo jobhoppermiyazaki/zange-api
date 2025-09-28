@@ -56,6 +56,37 @@
     .stamp-item:hover{ transform:translateY(-1px); box-shadow:0 4px 18px rgba(0,0,0,.06) }
     .stamp-item img{ width:48px; height:48px; object-fit:contain; display:none }
     .stamp-item span{ font-size:12px; font-weight:800; color:#111 }
+
+     /* --- 検索バーを横いっぱいに & 押しやすく --- */
+  .search-bar{
+    display:flex;
+    gap:10px;
+    align-items:center;
+    flex-wrap:wrap;              /* 狭い画面で折り返し */
+  }
+  .search-bar input[type="search"]{
+    flex:1 1 220px;              /* 可能な限り広く */
+    min-width:0;                 /* flexのはみ出し防止 */
+    height:44px;                 /* 親指で押しやすい */
+    padding:10px 12px;
+    border:1px solid #e5e7eb;
+    border-radius:12px;
+    font-size:16px;              /* iOSのズーム防止 */
+    background:#fff;
+  }
+  .search-bar .btn{
+    height:44px;
+    padding:0 14px;
+    border-radius:12px;
+    border:1px solid #e5e7eb;
+    background:#fff;
+    font-weight:800;
+    cursor:pointer;
+  }
+  @media (max-width:420px){
+    .search-bar .btn{ flex:0 0 auto }
+  }
+    
   </style>
 </head>
 <body>
@@ -78,9 +109,12 @@
 
   <main class="container" style="padding-bottom:90px">
     <section class="card">
-      <input id="headerSearch" type="search" placeholder="キーワードでさがす（本文・対象・タグ）" />
-      <button id="searchButton" class="btn" style="margin-left:8px">検索</button>
-    </section>
+  <div class="search-bar">
+    <input id="headerSearch" type="search" inputmode="search"
+           placeholder="キーワードでさがす（本文・対象・タグ）" />
+    <button id="searchButton" class="btn">検索</button>
+  </div>
+</section>
 
     <!-- ★ script.js がここへカードを描画します -->
     <section id="timeline"></section>
