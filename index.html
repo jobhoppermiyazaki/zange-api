@@ -1,58 +1,61 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <!-- 同一オリジン優先で API ベース決定 -->
+  <meta charset="UTF-8" />
+  <title>zange - タイムライン</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <link rel="stylesheet" href="style.css">
+
+  <!-- API ベース（既存仕様のまま） -->
   <script>
     window.ZANGE_API_BASES = [
       location.origin.replace(/\/+$/,'') + '/api/posts',
       'api/posts',
       '/api/posts'
     ];
+    /* 画像スタンプ探索ディレクトリ（script.js の STAMP_BASE_DIRS を上書きしない。必要ならここで追加） */
+    window.STAMP_BASE_DIRS = [
+      'images/stamps','stamps','assets/images/stamps','assets/stamps','img/stamps','./images/stamps','./stamps','/images/stamps'
+    ];
   </script>
-  <meta charset="UTF-8">
-  <title>zange - タイムライン</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <link rel="stylesheet" href="style.css">
-  <meta name="color-scheme" content="light">
 
   <style>
-    .feed-card{ padding:0; overflow:hidden }
-    .feed-head{ display:flex; align-items:center; gap:12px; padding:14px 16px; }
-    .feed-avatar{
-      width:44px; height:44px; border-radius:50%;
-      background:#fdece9; color:#666; font-weight:900;
-      display:grid; place-items:center; flex:0 0 auto; letter-spacing:.02em;
-      overflow:hidden;
-    }
-    .feed-avatar img{ width:100%; height:100%; object-fit:cover; display:block; border-radius:50%; }
-    .feed-username{ font-weight:800; font-size:16px }
-    .follow-btn{
-      margin-left:auto; font-size:14px; padding:4px 10px;
-      border-radius:6px; border:1px solid #ddd; background:#fff; cursor:pointer;
-    }
-    .follow-btn.following{ background:#2563eb; color:#fff; border-color:#2563eb; }
-    .feed-visual img{ width:100%; height:auto; display:block; background:#f3f4f6; }
-    .feed-title{ margin:14px 16px 4px; font-size:clamp(20px,5.6vw,28px); line-height:1.35; font-weight:900; letter-spacing:.2px; }
-    .feed-date{ color:#6b7280; font-size:13px; margin:0 16px 8px }
-    .feed-chips{ display:flex; flex-wrap:wrap; gap:8px; margin:0 16px 14px }
-    .chip{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; background:#f3f4f6; color:#111; font-weight:700; }
-    .chip .ic{ font-size:16px; line-height:1 }
+    /* タイムライン基本（既存の見た目を変えない最小の追記） */
+    .zange-visual img{ width:100%; height:auto; display:block; background:#f3f4f6; }
+    .zange-caption{ margin:12px 0 4px; font-size:clamp(18px,5.2vw,22px); font-weight:800; line-height:1.4 }
+    .reactions{ display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-top:10px }
+    .reactions .rx-btn{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:10px; border:1px solid #e5e7eb; background:#fff; cursor:pointer; }
+    .reactions .rx-ic{ width:22px; height:22px; object-fit:contain; vertical-align:middle; display:none; }
+    .reactions .rx-add{ margin-left:auto; width:36px; height:36px; border-radius:10px; border:1px solid #e5e7eb; background:#fff; cursor:pointer; font-weight:800; line-height:1; }
+    .topic-chip{ display:inline-flex; align-items:center; gap:10px; padding:8px 12px; margin:0 8px 8px 0; border-radius:999px; background:#f3f4f6; font-weight:800 }
+    .topic-chip .t-label{ cursor:pointer }
+    .topic-chip .t-post{ text-decoration:none }
 
-    /* リアクション行（既存の class 名に合わせる） */
-    .feed-actions{ display:flex; flex-wrap:wrap; gap:18px 24px; padding:10px 16px 14px; border-top:1px solid #eee; align-items:center; }
-    .rx{ display:inline-flex; align-items:center; gap:8px; font-weight:800; color:#111; min-width:52px; cursor:pointer; user-select:none; }
-    .rx .e{ font-size:22px; line-height:1 }
-    .rx .c{ font-size:16px; opacity:.9 }
-    .rx .rx-img{ width:22px; height:22px; object-fit:contain; display:none; }
-    .rx-add{ margin-left:auto; display:inline-flex; align-items:center; justify-content:center;
-      width:36px; height:36px; border-radius:10px; border:1px solid #e5e7eb; background:#fff;
-      cursor:pointer; font-weight:800; line-height:1; }
-    .rx-add .plus{ font-size:20px; line-height:1 }
-
-    .feed-footer{ display:flex; justify-content:flex-end; padding:0 16px 16px; }
-    .btn-link{ text-decoration:none; font-weight:800; color:#2f6fb0; padding:6px 10px; border-radius:8px; background:#f7fbff; border:1px solid #e6f0ff; }
-    .feed-visual.placeholder{ background:#f3f4f6; aspect-ratio:16/9; }
-    .stamp-item img{ width:44px; height:44px; object-fit:contain; display:block; }
+    /* ===== スタンプ選択モーダル（script.js が参照する DOM） ===== */
+    .stamp-modal-backdrop{
+      position:fixed; inset:0; background:rgba(15,23,42,.46);
+      display:none; align-items:center; justify-content:center; z-index:9999;
+    }
+    .stamp-modal{ width:min(560px,92vw); max-height:86vh; overflow:auto;
+      background:#fff; border-radius:16px; box-shadow:0 20px 50px rgba(0,0,0,.18);
+      padding:14px;
+    }
+    .stamp-modal .head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px }
+    .stamp-modal .head .ttl{ font-weight:900; font-size:16px }
+    .stamp-modal .close{ appearance:none; border:0; background:#f1f5f9; border-radius:8px; padding:6px 10px; cursor:pointer; font-weight:800 }
+    .stamp-grid{
+      display:grid; grid-template-columns:repeat(auto-fill, minmax(68px,1fr));
+      gap:12px;
+    }
+    .stamp-item{ border:1px solid #e5e7eb; border-radius:12px; cursor:pointer; padding:8px;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+      transition:transform .04s ease-in-out, box-shadow .06s ease-in-out;
+      background:#fff;
+    }
+    .stamp-item:hover{ transform:translateY(-1px); box-shadow:0 4px 18px rgba(0,0,0,.06) }
+    .stamp-item img{ width:48px; height:48px; object-fit:contain; display:none }
+    .stamp-item span{ font-size:12px; font-weight:800; color:#111 }
   </style>
 </head>
 <body>
@@ -63,18 +66,23 @@
     </div>
   </header>
 
+  <!-- お題 -->
   <section class="tutorial-section">
     <div class="tutorial-link card">
       <a href="about.html">📕 はじめての方はこちら</a>
     </div>
   </section>
-
-  <div class="topics-strip"><div id="todayTopics" class="topics-row"></div></div>
+  <div class="topics-strip">
+    <div id="todayTopics" class="topics-row" style="padding:10px"></div>
+  </div>
 
   <main class="container" style="padding-bottom:90px">
     <section class="card">
-      <input id="kw" type="text" placeholder="キーワードでさがす（本文・対象・タグ）" />
+      <input id="headerSearch" type="search" placeholder="キーワードでさがす（本文・対象・タグ）" />
+      <button id="searchButton" class="btn" style="margin-left:8px">検索</button>
     </section>
+
+    <!-- ★ script.js がここへカードを描画します -->
     <section id="timeline"></section>
   </main>
 
@@ -84,7 +92,10 @@
     <nav>
       <a href="index.html"><span class="icon">🏠</span><span class="label">ホーム</span></a>
       <a href="topics.html"><span class="icon">🎯</span><span class="label">お題</span></a>
-      <a href="notifications.html" class="nav-link nav-bell"><span class="icon-row"><span class="icon">🔔</span><span id="notifBadge" class="notif-badge"></span></span><span class="label">通知</span></a>
+      <a href="notifications.html" class="nav-link nav-bell">
+        <span class="icon-row"><span class="icon">🔔</span><span id="notifBadge" class="notif-badge"></span></span>
+        <span class="label">通知</span>
+      </a>
       <a href="settings.html"><span class="icon">⚙️</span><span class="label">設定</span></a>
       <a href="about.html"><span class="icon">📕</span><span class="label">概要</span></a>
     </nav>
@@ -92,154 +103,20 @@
   <a class="fab" href="post.html"><span class="emoji">🙏</span></a>
   <footer>&copy; 2025 zange (テスト公開中)</footer>
 
-  <!-- 既存の中核ロジック -->
+  <!-- 既存の中核ロジック（あなたの貼ってくれたもの） -->
   <script src="script.js"></script>
 
-  <!-- このページ固有：投稿取得＋フォローボタン（script.js のフォロー機構を利用） -->
-  <script>
-    function escapeHTML(s){
-      return (s||"").replace(/[&<>"']/g, m => ({
-        "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
-      }[m]));
-    }
-    function fmtDate(iso){
-      const d=new Date(iso||'');
-      if(isNaN(d))return'';
-      return `${d.getFullYear()}/${('0'+(d.getMonth()+1)).slice(-2)}/${('0'+d.getDate()).slice(-2)}`;
-    }
-    function resolveBgUrl(bg){
-      if(!bg)return'';
-      if(/^https?:/i.test(bg))return bg;
-      return 'images/'+String(bg).replace(/^\/+/,'');
-    }
+  <!-- ===== スタンプ選択モーダル（script.js の openStampPicker/closeStampPicker が操作） ===== -->
+  <div id="stampModalBackdrop" class="stamp-modal-backdrop" aria-hidden="true">
+    <div class="stamp-modal" role="dialog" aria-modal="true" aria-label="スタンプを選択">
+      <div class="head">
+        <div class="ttl">スタンプを選択</div>
+        <button type="button" class="close" onclick="closeStampPicker()">閉じる</button>
+      </div>
+      <div id="stampGrid" class="stamp-grid"><!-- script.js が自動で埋めます --></div>
+    </div>
+  </div>
 
-    // ===== API =====
-    async function loadPosts(){
-      const res = await fetch('/api/posts',{credentials:'include', cache:'no-store'});
-      const data = await res.json().catch(()=>[]);
-      return Array.isArray(data) ? data : [];
-    }
-
-    // ===== フォローUI（script.js の users/following を使用） =====
-    function resolveTargetIdByAuthor(author){
-      if (!author) return null;
-      if (typeof ensureUserIdForNickname === 'function') {
-        try { return ensureUserIdForNickname(String(author)); } catch { return null; }
-      }
-      return null;
-    }
-
-    function renderFollowButtonByAuthor(author){
-      const targetId = resolveTargetIdByAuthor(author);
-      const me = (typeof getAuthUser === 'function') ? getAuthUser() : null;
-
-      // 自分のカードなら非表示
-      if (!targetId || (me && String(me.profile?.nickname||me.email||'') === String(author))) return '';
-
-      const following = me ? ((me.following||[]).includes(targetId)) : false;
-      const cls  = following ? 'follow-btn following' : 'follow-btn';
-      const text = following ? 'フォロー中' : 'フォローする';
-      return `<button type="button" class="${cls}" data-follow-user="${escapeHTML(targetId)}">${text}</button>`;
-    }
-
-    // ==== 投稿描画 ====
-    function renderPosts(posts){
-      const host=document.getElementById('timeline');host.innerHTML='';
-      const kw=(document.getElementById('kw')?.value||'').trim().toLowerCase();
-
-      posts
-        .filter(p=>{
-          if(!kw) return true;
-          const hay=`${p.text||''} ${p.target||''} ${p.tag||''}`.toLowerCase();
-          return hay.includes(kw);
-        })
-        .forEach(p=>{
-          const author=p.author||'匿名';
-          const avatarCh=author[0]||'匿';
-          const when=fmtDate(p.createdAt||p.date);
-          const card=document.createElement('article');
-          card.className='card feed-card';
-          card.setAttribute('data-postid',p.id);
-
-          const visualHtml = p.bg
-            ? `<div class="feed-visual"><img src="${escapeHTML(resolveBgUrl(p.bg))}" alt=""></div>`
-            : `<div class="feed-visual placeholder"></div>`;
-
-          const chipsHtml = `
-            ${p.target?`<span class="chip"><span class="ic">🙏</span><span>${escapeHTML(p.target)}</span></span>`:''}
-            ${p.tag?`<span class="chip"><span class="ic">🔖</span><span>${escapeHTML(p.tag)}</span></span>`:''}
-          `;
-
-          /* ▼ リアクション行（🙏等の既定表示＋＋ボタン） */
-          const actionsHtml = `
-            <div class="feed-actions" data-postid="${escapeHTML(String(p.id))}">
-              <div class="rx" data-rx="pray"><span class="e">🙏</span><span class="c">${Number(p.rx?.pray||0)}</span></div>
-              <button class="rx-add" type="button" aria-label="スタンプを追加"><span class="plus">＋</span></button>
-            </div>
-          `;
-
-          card.innerHTML=`
-            <div class="feed-head">
-              <div class="feed-avatar">${escapeHTML(avatarCh)}</div>
-              <div class="feed-username">${escapeHTML(author)}</div>
-              ${renderFollowButtonByAuthor(author)}
-            </div>
-
-            ${visualHtml}
-
-            <h2 class="feed-title">${escapeHTML(p.text||'')}</h2>
-            <div class="feed-date">${when}</div>
-
-            <div class="feed-chips">${chipsHtml}</div>
-
-            ${actionsHtml}
-
-            <div class="feed-footer">
-              <a class="btn-link" href="detail.html?id=${encodeURIComponent(p.id)}">コメント</a>
-            </div>
-          `;
-          host.appendChild(card);
-        });
-
-      /* もし script.js がリアクションを上書きレンダリングするなら、この DOM はそのままフック用として使われます */
-    }
-
-    // ===== フォロー操作 =====
-    document.addEventListener('click', e=>{
-      const btn = e.target.closest('.follow-btn'); 
-      if (!btn) return;
-
-      const targetId = btn.getAttribute('data-follow-user');
-      const me = (typeof getAuthUser === 'function') ? getAuthUser() : null;
-      if (!me){ alert('ログインが必要です'); return; }
-      if (!targetId || String(targetId) === String(me.id)) return;
-
-      if ((me.following||[]).includes(targetId)) {
-        if (typeof unfollowUser === 'function') unfollowUser(targetId);
-      } else {
-        if (typeof followUser === 'function') followUser(targetId);
-      }
-
-      const latestFollowing = (getAuthUser()?.following||[]).includes(targetId);
-      document.querySelectorAll(`button[data-follow-user="${CSS.escape(targetId)}"]`).forEach(b=>{
-        b.classList.toggle('following', latestFollowing);
-        b.textContent = latestFollowing ? 'フォロー中' : 'フォローする';
-      });
-
-      if (typeof renderFollowBoxesSafe === 'function') renderFollowBoxesSafe();
-    });
-
-    // ===== 検索 =====
-    document.getElementById('kw')?.addEventListener('input', async ()=>{
-      const posts = await loadPosts();
-      renderPosts(posts);
-    });
-
-    // ===== 初期化 =====
-    document.addEventListener('DOMContentLoaded', async ()=>{
-      const posts = await loadPosts();
-      renderPosts(posts);
-    });
-  </script>
+  <!-- 何も上書きしない：描画やクリック処理は script.js に委譲 -->
 </body>
 </html>
