@@ -40,6 +40,22 @@
     .follow-tabs .tabpanel{ display:block !important; width:100% !important; clear:both !important; margin-top:6px; }
     .follow-tabs .follow-stats.under{ display:block !important; margin:6px 0 10px; clear:both !important; }
     #followingList, #followersList{ display:block !important; }
+
+    /* --- タブ切替が効くように表示/非表示を .show で制御（強制上書き） --- */
+  .follow-tabs .tabpanel { 
+    display: none !important;        /* まず両方隠す */
+  }
+  .follow-tabs .tabpanel.show {
+    display: block !important;       /* 選択中だけ表示 */
+  }
+
+  /* アニメっぽく切替したい場合はオプションで */
+  .follow-tabs .tabpanel {
+    opacity: 0; transition: opacity .12s ease;
+  }
+  .follow-tabs .tabpanel.show {
+    opacity: 1;
+  }
   </style>
 </head>
 <body>
