@@ -86,7 +86,21 @@
   @media (max-width:420px){
     .search-bar .btn{ flex:0 0 auto }
   }
-    
+    /* 検索ボタンを投稿🙏ボタンと同じ配色に */
+.search-bar .btn {
+  height:44px;
+  padding:0 14px;
+  border-radius:12px;
+  border:none;
+  background:#8b5cf6;   /* ← 投稿🙏と同じ紫色 */
+  color:#fff;           /* 白文字で視認性アップ */
+  font-weight:800;
+  cursor:pointer;
+  transition:background 0.2s;
+}
+.search-bar .btn:hover {
+  background:#7c3aed;   /* hover時 少し濃く */
+}
   </style>
 </head>
 <body>
