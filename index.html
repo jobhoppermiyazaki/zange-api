@@ -37,6 +37,8 @@
     .feed-chips{ display:flex; flex-wrap:wrap; gap:8px; margin:0 16px 14px }
     .chip{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; background:#f3f4f6; color:#111; font-weight:700; }
     .chip .ic{ font-size:16px; line-height:1 }
+
+    /* リアクション行（既存の class 名に合わせる） */
     .feed-actions{ display:flex; flex-wrap:wrap; gap:18px 24px; padding:10px 16px 14px; border-top:1px solid #eee; align-items:center; }
     .rx{ display:inline-flex; align-items:center; gap:8px; font-weight:800; color:#111; min-width:52px; cursor:pointer; user-select:none; }
     .rx .e{ font-size:22px; line-height:1 }
@@ -46,6 +48,7 @@
       width:36px; height:36px; border-radius:10px; border:1px solid #e5e7eb; background:#fff;
       cursor:pointer; font-weight:800; line-height:1; }
     .rx-add .plus{ font-size:20px; line-height:1 }
+
     .feed-footer{ display:flex; justify-content:flex-end; padding:0 16px 16px; }
     .btn-link{ text-decoration:none; font-weight:800; color:#2f6fb0; padding:6px 10px; border-radius:8px; background:#f7fbff; border:1px solid #e6f0ff; }
     .feed-visual.placeholder{ background:#f3f4f6; aspect-ratio:16/9; }
@@ -120,7 +123,6 @@
     // ===== フォローUI（script.js の users/following を使用） =====
     function resolveTargetIdByAuthor(author){
       if (!author) return null;
-      // script.js にある util を利用（なければ null）
       if (typeof ensureUserIdForNickname === 'function') {
         try { return ensureUserIdForNickname(String(author)); } catch { return null; }
       }
@@ -168,6 +170,14 @@
             ${p.tag?`<span class="chip"><span class="ic">🔖</span><span>${escapeHTML(p.tag)}</span></span>`:''}
           `;
 
+          /* ▼ リアクション行（🙏等の既定表示＋＋ボタン） */
+          const actionsHtml = `
+            <div class="feed-actions" data-postid="${escapeHTML(String(p.id))}">
+              <div class="rx" data-rx="pray"><span class="e">🙏</span><span class="c">${Number(p.rx?.pray||0)}</span></div>
+              <button class="rx-add" type="button" aria-label="スタンプを追加"><span class="plus">＋</span></button>
+            </div>
+          `;
+
           card.innerHTML=`
             <div class="feed-head">
               <div class="feed-avatar">${escapeHTML(avatarCh)}</div>
@@ -182,15 +192,19 @@
 
             <div class="feed-chips">${chipsHtml}</div>
 
+            ${actionsHtml}
+
             <div class="feed-footer">
               <a class="btn-link" href="detail.html?id=${encodeURIComponent(p.id)}">コメント</a>
             </div>
           `;
           host.appendChild(card);
         });
+
+      /* もし script.js がリアクションを上書きレンダリングするなら、この DOM はそのままフック用として使われます */
     }
 
-    // ===== イベント =====
+    // ===== フォロー操作 =====
     document.addEventListener('click', e=>{
       const btn = e.target.closest('.follow-btn'); 
       if (!btn) return;
@@ -200,29 +214,28 @@
       if (!me){ alert('ログインが必要です'); return; }
       if (!targetId || String(targetId) === String(me.id)) return;
 
-      // トグル（script.js の関数を使用）
       if ((me.following||[]).includes(targetId)) {
         if (typeof unfollowUser === 'function') unfollowUser(targetId);
       } else {
         if (typeof followUser === 'function') followUser(targetId);
       }
 
-      // 同じ相手のボタン表記を一括更新
       const latestFollowing = (getAuthUser()?.following||[]).includes(targetId);
       document.querySelectorAll(`button[data-follow-user="${CSS.escape(targetId)}"]`).forEach(b=>{
         b.classList.toggle('following', latestFollowing);
         b.textContent = latestFollowing ? 'フォロー中' : 'フォローする';
       });
 
-      // settings.html の一覧も即反映（あれば）
       if (typeof renderFollowBoxesSafe === 'function') renderFollowBoxesSafe();
     });
 
+    // ===== 検索 =====
     document.getElementById('kw')?.addEventListener('input', async ()=>{
       const posts = await loadPosts();
       renderPosts(posts);
     });
 
+    // ===== 初期化 =====
     document.addEventListener('DOMContentLoaded', async ()=>{
       const posts = await loadPosts();
       renderPosts(posts);
