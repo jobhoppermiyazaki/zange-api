@@ -50,6 +50,25 @@
     .btn-link{ text-decoration:none; font-weight:800; color:#2f6fb0; padding:6px 10px; border-radius:8px; background:#f7fbff; border:1px solid #e6f0ff; }
     .feed-visual.placeholder{ background:#f3f4f6; aspect-ratio:16/9; }
     .stamp-item img{ width:44px; height:44px; object-fit:contain; display:block; }
+
+    /* スタンプピッカー（ポップイン） */
+    .stamp-picker{
+      display:none;
+      position:relative;
+      padding:8px;
+      margin:0 16px 12px;
+      border:1px solid #e5e7eb;
+      background:#fff;
+      border-radius:12px;
+      box-shadow:0 6px 20px rgba(0,0,0,.08);
+    }
+    .stamp-row{ display:flex; gap:8px; flex-wrap:wrap }
+    .stamp-choice{
+      width:36px; height:36px; display:grid; place-items:center; border-radius:8px;
+      border:1px solid #e5e7eb; cursor:pointer; background:#fff; font-size:22px;
+    }
+    .stamp-choice:hover{ background:#f9fafb }
+    .stamp-picker.show{ display:block }
   </style>
 </head>
 <body>
@@ -92,10 +111,17 @@
   <!-- 既存の中核ロジック -->
   <script src="script.js"></script>
 
-  <!-- このページ固有：投稿取得＋フォローボタン（script.js のフォロー機構を利用） -->
+  <!-- このページ固有：投稿取得＋フォロー機構利用＋スタンプピッカー -->
   <script>
+    const AVA_FALLBACK_URL = "images/default-avatar.png";
+    const AVA_FALLBACK_DATAURI =
+      'data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 84 84"><circle cx="42" cy="42" r="42" fill="%23f1f5f9"/><circle cx="42" cy="34" r="14" fill="%23cbd5e1"/><rect x="16" y="52" width="52" height="20" rx="10" fill="%23cbd5e1"/></svg>';
+
     function escapeHTML(s){return (s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
-    function fmtDate(iso){const d=new Date(iso||'');if(isNaN(d))return'';return ${d.getFullYear()}/${('0'+(d.getMonth()+1)).slice(-2)}/${('0'+d.getDate()).slice(-2)}}
+    function fmtDate(iso){
+      const d=new Date(iso||''); if(isNaN(d))return'';
+      return `${d.getFullYear()}/${('0'+(d.getMonth()+1)).slice(-2)}/${('0'+d.getDate()).slice(-2)}`
+    }
     function resolveBgUrl(bg){if(!bg)return'';if(/^https?:/i.test(bg))return bg;return'images/'+String(bg).replace(/^\/+/,'')}
 
     // ===== API =====
@@ -108,7 +134,6 @@
     // ===== フォローUI（script.js の users/following を使用） =====
     function resolveTargetIdByAuthor(author){
       if (!author) return null;
-      // script.js にある util を利用（なければ null）
       if (typeof ensureUserIdForNickname === 'function') {
         return ensureUserIdForNickname(String(author));
       }
@@ -118,14 +143,86 @@
     function renderFollowButtonByAuthor(author){
       const targetId = resolveTargetIdByAuthor(author);
       const me = (typeof getAuthUser === 'function') ? getAuthUser() : null;
-
-      // 自分のカードなら非表示
       if (!targetId || (me && String(me.profile?.nickname||me.email||'') === String(author))) return '';
-
       const following = me ? ((me.following||[]).includes(targetId)) : false;
       const cls  = following ? 'follow-btn following' : 'follow-btn';
       const text = following ? 'フォロー中' : 'フォローする';
-      return <button type="button" class="${cls}" data-follow-user="${escapeHTML(targetId)}">${text}</button>;
+      return `<button type="button" class="${cls}" data-follow-user="${escapeHTML(targetId)}">${text}</button>`;
+    }
+
+    /* ======= スタンプ（リアクション）関連 ======= */
+    const STAMP_CANDIDATES = ['🙏','👍','😊','🔥','😭','🎉','💯','😮'];
+
+    // カード内のピッカーHTML
+    function renderStampPickerHTML(){
+      return `
+        <div class="stamp-picker">
+          <div class="stamp-row">
+            ${STAMP_CANDIDATES.map(e=>`<button type="button" class="stamp-choice" data-stamp="${e}">${e}</button>`).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // 既存リアクションの簡易描画（p.reactions {emoji:count} / p.stamps などに対応）
+    function renderReactionsHTML(p){
+      const src = p?.reactions || p?.stamps || {};
+      const entries = Array.isArray(src) ? src : Object.entries(src);
+      if (!entries || (Array.isArray(src)&&!src.length) || (!Array.isArray(src)&&!Object.keys(src).length)) {
+        return '';
+      }
+      if (Array.isArray(src)) {
+        // [{emoji:'🙏',count:2}] 形式
+        return src.map(x => `
+          <div class="rx" data-stamp="${escapeHTML(x.emoji||'')}">
+            <span class="e">${escapeHTML(x.emoji||'')}</span>
+            <span class="c">${Number(x.count||0)}</span>
+          </div>
+        `).join('');
+      }
+      // { '🙏': 2, '👍': 1 } 形式
+      return Object.keys(src).map(k=>`
+        <div class="rx" data-stamp="${escapeHTML(k)}">
+          <span class="e">${escapeHTML(k)}</span>
+          <span class="c">${Number(src[k]||0)}</span>
+        </div>
+      `).join('');
+    }
+
+    // UI 反映
+    function applyReactionToCard(card, stamp){
+      let elem = card.querySelector(`.feed-actions .rx[data-stamp="${CSS.escape(stamp)}"]`);
+      if (!elem) {
+        const rx = document.createElement('div');
+        rx.className = 'rx';
+        rx.setAttribute('data-stamp', stamp);
+        rx.innerHTML = `<span class="e">${escapeHTML(stamp)}</span><span class="c">1</span>`;
+        const actions = card.querySelector('.feed-actions');
+        actions.insertBefore(rx, actions.querySelector('.rx-add')); // + の左に差し込む
+        return;
+      }
+      const cnt = elem.querySelector('.c');
+      cnt.textContent = String((Number(cnt.textContent)||0) + 1);
+    }
+
+    // サーバーがあれば送る（無くても UI は反映）
+    async function sendReaction(postId, stamp){
+      const endpoints = [
+        `/api/posts/${encodeURIComponent(postId)}/stamp`,
+        `/api/posts/${encodeURIComponent(postId)}/react`
+      ];
+      for(const url of endpoints){
+        try{
+          const res = await fetch(url,{
+            method:'POST',
+            credentials:'include',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ stamp, emoji: stamp })
+          });
+          if (res.ok) return true;
+        }catch(_){}
+      }
+      return false;
     }
 
     // ==== 投稿描画 ====
@@ -136,7 +233,7 @@
       posts
         .filter(p=>{
           if(!kw) return true;
-          const hay=${p.text||''} ${p.target||''} ${p.tag||''}.toLowerCase();
+          const hay=`${p.text||''} ${p.target||''} ${p.tag||''}`.toLowerCase();
           return hay.includes(kw);
         })
         .forEach(p=>{
@@ -154,16 +251,23 @@
               ${renderFollowButtonByAuthor(author)}
             </div>
 
-            ${p.bg ? <div class="feed-visual"><img src="${escapeHTML(resolveBgUrl(p.bg))}" alt=""></div>
-                   : <div class="feed-visual placeholder"></div>}
+            ${p.bg ? `<div class="feed-visual"><img src="${escapeHTML(resolveBgUrl(p.bg))}" alt=""></div>`
+                   : `<div class="feed-visual placeholder"></div>`}
 
             <h2 class="feed-title">${escapeHTML(p.text||'')}</h2>
             <div class="feed-date">${when}</div>
 
             <div class="feed-chips">
-              ${p.target?<span class="chip"><span class="ic">🙏</span><span>${escapeHTML(p.target)}</span></span>:''}
-              ${p.tag?<span class="chip"><span class="ic">🔖</span><span>${escapeHTML(p.tag)}</span></span>:''}
+              ${p.target?`<span class="chip"><span class="ic">🙏</span><span>${escapeHTML(p.target)}</span></span>`:''}
+              ${p.tag?`<span class="chip"><span class="ic">🔖</span><span>${escapeHTML(p.tag)}</span></span>`:''}
             </div>
+
+            <div class="feed-actions">
+              ${renderReactionsHTML(p)}
+              <button type="button" class="rx-add" aria-label="スタンプを追加"><span class="plus">＋</span></button>
+            </div>
+
+            ${renderStampPickerHTML()}
 
             <div class="feed-footer">
               <a class="btn-link" href="detail.html?id=${encodeURIComponent(p.id)}">コメント</a>
@@ -173,7 +277,8 @@
         });
     }
 
-    // ===== イベント =====
+    /* ====== イベント ====== */
+    // フォロー
     document.addEventListener('click', e=>{
       const btn = e.target.closest('.follow-btn'); 
       if (!btn) return;
@@ -183,29 +288,59 @@
       if (!me){ alert('ログインが必要です'); return; }
       if (!targetId || String(targetId) === String(me.id)) return;
 
-      // トグル（script.js の関数を使用）
       if ((me.following||[]).includes(targetId)) {
         if (typeof unfollowUser === 'function') unfollowUser(targetId);
       } else {
         if (typeof followUser === 'function') followUser(targetId);
       }
 
-      // 同じ相手のボタン表記を一括更新
       const latestFollowing = (getAuthUser()?.following||[]).includes(targetId);
-      document.querySelectorAll(button[data-follow-user="${CSS.escape(targetId)}"]).forEach(b=>{
+      document.querySelectorAll(`button[data-follow-user="${CSS.escape(targetId)}"]`).forEach(b=>{
         b.classList.toggle('following', latestFollowing);
         b.textContent = latestFollowing ? 'フォロー中' : 'フォローする';
       });
 
-      // settings.html の一覧も即反映（あれば）
       if (typeof renderFollowBoxesSafe === 'function') renderFollowBoxesSafe();
     });
 
+    // ＋ボタンでピッカー開閉（カード毎）
+    document.addEventListener('click', e=>{
+      const plus = e.target.closest('.rx-add');
+      if (!plus) return;
+      const card = plus.closest('.feed-card');
+      const picker = card.querySelector('.stamp-picker');
+      // ほかを閉じる
+      document.querySelectorAll('.stamp-picker.show').forEach(el=>{ if(el!==picker) el.classList.remove('show'); });
+      picker.classList.toggle('show');
+    });
+
+    // スタンプ選択
+    document.addEventListener('click', async e=>{
+      const choice = e.target.closest('.stamp-choice');
+      if (!choice) return;
+      const stamp = choice.dataset.stamp;
+      const card = choice.closest('.feed-card');
+      const postId = card.getAttribute('data-postid');
+
+      applyReactionToCard(card, stamp);         // UI 即時反映
+      choice.closest('.stamp-picker')?.classList.remove('show'); // ピッカー閉じる
+      // サーバーがあれば送る（失敗しても UI は維持）
+      sendReaction(postId, stamp);
+    });
+
+    // ピッカー以外をクリックで閉じる
+    document.addEventListener('click', (e)=>{
+      if (e.target.closest('.stamp-picker') || e.target.closest('.rx-add')) return;
+      document.querySelectorAll('.stamp-picker.show').forEach(el=>el.classList.remove('show'));
+    });
+
+    // 検索
     document.getElementById('kw')?.addEventListener('input', async ()=>{
       const posts = await loadPosts();
       renderPosts(posts);
     });
 
+    // 初期ロード
     document.addEventListener('DOMContentLoaded', async ()=>{
       const posts = await loadPosts();
       renderPosts(posts);
