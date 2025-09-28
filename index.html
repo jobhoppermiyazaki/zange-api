@@ -8,8 +8,6 @@
       'api/posts',
       '/api/posts'
     ];
-    /* ここで使うスタンプ名（拡張子は自動解決）。必要に応じて追加・差し替え可 */
-    window.ZANGE_STAMP_NAMES = window.ZANGE_STAMP_NAMES || ["wakaru"];
   </script>
   <meta charset="UTF-8">
   <title>zange - タイムライン</title>
@@ -39,32 +37,19 @@
     .feed-chips{ display:flex; flex-wrap:wrap; gap:8px; margin:0 16px 14px }
     .chip{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; background:#f3f4f6; color:#111; font-weight:700; }
     .chip .ic{ font-size:16px; line-height:1 }
-
-    /* リアクション行 */
-    .feed-actions{ display:flex; flex-wrap:wrap; gap:12px 14px; padding:10px 16px 14px; border-top:1px solid #eee; align-items:center; }
-    .stamp-item img{ width:28px; height:28px; object-fit:contain; display:block; }
-    .rx-add{
-      margin-left:auto; display:inline-flex; align-items:center; justify-content:center;
+    .feed-actions{ display:flex; flex-wrap:wrap; gap:18px 24px; padding:10px 16px 14px; border-top:1px solid #eee; align-items:center; }
+    .rx{ display:inline-flex; align-items:center; gap:8px; font-weight:800; color:#111; min-width:52px; cursor:pointer; user-select:none; }
+    .rx .e{ font-size:22px; line-height:1 }
+    .rx .c{ font-size:16px; opacity:.9 }
+    .rx .rx-img{ width:22px; height:22px; object-fit:contain; display:none; }
+    .rx-add{ margin-left:auto; display:inline-flex; align-items:center; justify-content:center;
       width:36px; height:36px; border-radius:10px; border:1px solid #e5e7eb; background:#fff;
-      cursor:pointer; font-weight:800; line-height:1;
-    }
+      cursor:pointer; font-weight:800; line-height:1; }
     .rx-add .plus{ font-size:20px; line-height:1 }
-
     .feed-footer{ display:flex; justify-content:flex-end; padding:0 16px 16px; }
     .btn-link{ text-decoration:none; font-weight:800; color:#2f6fb0; padding:6px 10px; border-radius:8px; background:#f7fbff; border:1px solid #e6f0ff; }
     .feed-visual.placeholder{ background:#f3f4f6; aspect-ratio:16/9; }
-
-    /* スタンプ選択パネル（カード内に開く簡易ポップオーバ） */
-    .rx-picker{
-      margin:0 16px 12px; padding:10px; border:1px solid #e5e7eb; border-radius:12px;
-      display:none; background:#fff; box-shadow:0 8px 20px rgba(0,0,0,.08);
-    }
-    .rx-picker.open{ display:grid; grid-template-columns:repeat(6, 40px); gap:10px; }
-    .rx-picker button{
-      width:40px; height:40px; padding:0; border:0; background:#fff; cursor:pointer; border-radius:8px;
-      display:grid; place-items:center;
-    }
-    .rx-picker img{ width:100%; height:100%; object-fit:contain; }
+    .stamp-item img{ width:44px; height:44px; object-fit:contain; display:block; }
   </style>
 </head>
 <body>
@@ -107,58 +92,43 @@
   <!-- 既存の中核ロジック -->
   <script src="script.js"></script>
 
-  <!-- このページ固有：投稿取得＋フォローボタン＋画像スタンプ選択 -->
+  <!-- このページ固有：投稿取得＋フォローボタン（script.js のフォロー機構を利用） -->
   <script>
-    function escapeHTML(s){return (s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;","&gt":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
-    function fmtDate(iso){const d=new Date(iso||'');if(isNaN(d))return'';return `${d.getFullYear()}/${('0'+(d.getMonth()+1)).slice(-2)}/${('0'+d.getDate()).slice(-2)}`}
-    function resolveBgUrl(bg){if(!bg)return'';if(/^https?:/i.test(bg))return bg;return 'images/'+String(bg).replace(/^\/+/,'')}
+    function escapeHTML(s){return (s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
+    function fmtDate(iso){const d=new Date(iso||'');if(isNaN(d))return'';return ${d.getFullYear()}/${('0'+(d.getMonth()+1)).slice(-2)}/${('0'+d.getDate()).slice(-2)}}
+    function resolveBgUrl(bg){if(!bg)return'';if(/^https?:/i.test(bg))return bg;return'images/'+String(bg).replace(/^\/+/,'')}
 
-    /* ---- スタンプ画像解決（相対パス固定、拡張子を順に試す） ---- */
-    const STAMP_NAMES = (window.ZANGE_STAMP_NAMES||["wakaru"]).map(s=>String(s));
-    const STAMP_EXTS  = ["png","jpg","jpeg","webp"];
-    function resolveStampSrc(name){
-      // 最初の候補を返し、onerror で data-next を辿って次を試す
-      const paths = STAMP_EXTS.map(ext=>`stamps/${name}.${ext}`);
-      return { first: paths[0], rest: paths.slice(1) };
-    }
-    function chainOnError(img, rest){
-      if(!rest || !rest.length) return;
-      const next = rest.slice(); // copy
-      img.onerror = ()=>{ 
-        const p = next.shift();
-        if(p){ img.src = p; chainOnError(img, next); }
-        else { img.style.display='none'; }
-      };
-    }
-
-    /* ---- API ---- */
+    // ===== API =====
     async function loadPosts(){
-      try{
-        const res = await fetch('/api/posts',{credentials:'include', cache:'no-store'});
-        const data = await res.json().catch(()=>[]);
-        return Array.isArray(data) ? data : (data.posts||[]);
-      }catch{ return []; }
+      const res = await fetch('/api/posts',{credentials:'include', cache:'no-store'});
+      const data = await res.json().catch(()=>[]);
+      return Array.isArray(data) ? data : [];
     }
 
-    /* ---- フォローUI（script.js の users/following を使用） ---- */
+    // ===== フォローUI（script.js の users/following を使用） =====
     function resolveTargetIdByAuthor(author){
       if (!author) return null;
+      // script.js にある util を利用（なければ null）
       if (typeof ensureUserIdForNickname === 'function') {
-        try{ return ensureUserIdForNickname(String(author)); }catch{ return null; }
+        return ensureUserIdForNickname(String(author));
       }
       return null;
     }
+
     function renderFollowButtonByAuthor(author){
       const targetId = resolveTargetIdByAuthor(author);
       const me = (typeof getAuthUser === 'function') ? getAuthUser() : null;
+
+      // 自分のカードなら非表示
       if (!targetId || (me && String(me.profile?.nickname||me.email||'') === String(author))) return '';
+
       const following = me ? ((me.following||[]).includes(targetId)) : false;
       const cls  = following ? 'follow-btn following' : 'follow-btn';
       const text = following ? 'フォロー中' : 'フォローする';
-      return `<button type="button" class="${cls}" data-follow-user="${escapeHTML(targetId)}">${text}</button>`;
+      return <button type="button" class="${cls}" data-follow-user="${escapeHTML(targetId)}">${text}</button>;
     }
 
-    /* ---- タイムライン描画 ---- */
+    // ==== 投稿描画 ====
     function renderPosts(posts){
       const host=document.getElementById('timeline');host.innerHTML='';
       const kw=(document.getElementById('kw')?.value||'').trim().toLowerCase();
@@ -166,7 +136,7 @@
       posts
         .filter(p=>{
           if(!kw) return true;
-          const hay=`${p.text||''} ${p.target||''} ${p.tag||''}`.toLowerCase();
+          const hay=${p.text||''} ${p.target||''} ${p.tag||''}.toLowerCase();
           return hay.includes(kw);
         })
         .forEach(p=>{
@@ -177,191 +147,58 @@
           card.className='card feed-card';
           card.setAttribute('data-postid',p.id);
 
-          // 既存: ターゲット・タグの行はそのまま（仕様を崩さない）
-          const chipsHtml = `
-            ${p.target?`<span class="chip"><span class="ic">🙏</span><span>${escapeHTML(p.target)}</span></span>`:''}
-            ${p.tag?`<span class="chip"><span class="ic">🔖</span><span>${escapeHTML(p.tag)}</span></span>`:''}
-          `;
-
           card.innerHTML=`
             <div class="feed-head">
-              <div class="feed-avatar" aria-hidden="true">${escapeHTML(avatarCh)}</div>
+              <div class="feed-avatar">${escapeHTML(avatarCh)}</div>
               <div class="feed-username">${escapeHTML(author)}</div>
               ${renderFollowButtonByAuthor(author)}
             </div>
 
-            ${p.bg ? `<div class="feed-visual"><img src="${escapeHTML(resolveBgUrl(p.bg))}" alt=""></div>`
-                   : `<div class="feed-visual placeholder"></div>`}
+            ${p.bg ? <div class="feed-visual"><img src="${escapeHTML(resolveBgUrl(p.bg))}" alt=""></div>
+                   : <div class="feed-visual placeholder"></div>}
 
             <h2 class="feed-title">${escapeHTML(p.text||'')}</h2>
             <div class="feed-date">${when}</div>
 
-            <div class="feed-chips">${chipsHtml}</div>
-
-            <!-- リアクション行：既存UIを尊重しつつ追加 -->
-            <div class="feed-actions" data-actions-for="${escapeHTML(String(p.id))}">
-              <div class="rx-stamps"></div>
-              <button type="button" class="rx-add" aria-label="スタンプ追加" data-open-picker="${escapeHTML(String(p.id))}">
-                <span class="plus">＋</span>
-              </button>
+            <div class="feed-chips">
+              ${p.target?<span class="chip"><span class="ic">🙏</span><span>${escapeHTML(p.target)}</span></span>:''}
+              ${p.tag?<span class="chip"><span class="ic">🔖</span><span>${escapeHTML(p.tag)}</span></span>:''}
             </div>
-
-            <!-- スタンプ選択（カード内に差し込む） -->
-            <div class="rx-picker" id="picker-${escapeHTML(String(p.id))}" data-picker-for="${escapeHTML(String(p.id))}"></div>
 
             <div class="feed-footer">
               <a class="btn-link" href="detail.html?id=${encodeURIComponent(p.id)}">コメント</a>
             </div>
           `;
           host.appendChild(card);
-
-          // ピッカーの中身を組み立て（画像は相対パスで onerror フォールバック）
-          const picker = card.querySelector('.rx-picker');
-          STAMP_NAMES.forEach(name=>{
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.setAttribute('data-stamp', name);
-            const img = document.createElement('img');
-            const {first, rest} = resolveStampSrc(name);
-            img.alt = name;
-            img.src = first;
-            chainOnError(img, rest);
-            btn.appendChild(img);
-            picker.appendChild(btn);
-          });
         });
-
-      // 著者アバターを後から差し替え
-      enhanceAuthorAvatars(posts);
     }
 
-    /* ---- 著者アバター：一括取得して差し替え（なければ頭文字のまま） ---- */
-    async function enhanceAuthorAvatars(posts){
-      const names = Array.from(new Set((posts||[]).map(p=>p.author).filter(Boolean)));
-      if(!names.length) return;
-      try{
-        const q = encodeURIComponent(names.join(','));
-        const endpoints = [`/api/users?nicknames=${q}`, `/api/profiles?nicknames=${q}`];
-        let map = {};
-        for(const url of endpoints){
-          const res = await fetch(url,{credentials:"include", cache:"no-store"});
-          if(!res.ok) continue;
-          const data = await res.json();
-          const list = data.users || data.profiles || data || [];
-          (list||[]).forEach(u=>{
-            const k = (u.nickname||u.name||'').trim();
-            if(k) map[k] = u.avatar||'';
-          });
-          if(Object.keys(map).length) break;
-        }
-        if(!Object.keys(map).length) return;
-
-        // 置換
-        document.querySelectorAll('.feed-card').forEach(card=>{
-          const nameEl = card.querySelector('.feed-username');
-          const box = card.querySelector('.feed-avatar');
-          if(!nameEl || !box) return;
-          const name = nameEl.textContent.trim();
-          const url = map[name];
-          if(url){
-            box.innerHTML = `<img src="${escapeHTML(url)}" alt="">`;
-            box.removeAttribute('aria-hidden');
-          }
-        });
-      }catch{}
-    }
-
-    /* ---- スタンプ ピッカー開閉 & 反映 ---- */
-    function closeAllPickers(){ document.querySelectorAll('.rx-picker.open').forEach(el=>el.classList.remove('open')); }
-
+    // ===== イベント =====
     document.addEventListener('click', e=>{
-      // フォロー
-      const btnFollow = e.target.closest('.follow-btn');
-      if (btnFollow){
-        const targetId = btnFollow.getAttribute('data-follow-user');
-        const me = (typeof getAuthUser === 'function') ? getAuthUser() : null;
-        if (!me){ alert('ログインが必要です'); return; }
-        if (!targetId || String(targetId) === String(me.id)) return;
-        if ((me.following||[]).includes(targetId)) {
-          if (typeof unfollowUser === 'function') unfollowUser(targetId);
-        } else {
-          if (typeof followUser === 'function') followUser(targetId);
-        }
-        const latest = (getAuthUser()?.following||[]).includes(targetId);
-        document.querySelectorAll(`button[data-follow-user="${CSS.escape(targetId)}"]`).forEach(b=>{
-          b.classList.toggle('following', latest);
-          b.textContent = latest ? 'フォロー中' : 'フォローする';
-        });
-        if (typeof renderFollowBoxesSafe === 'function') renderFollowBoxesSafe();
-        return;
+      const btn = e.target.closest('.follow-btn'); 
+      if (!btn) return;
+
+      const targetId = btn.getAttribute('data-follow-user');
+      const me = (typeof getAuthUser === 'function') ? getAuthUser() : null;
+      if (!me){ alert('ログインが必要です'); return; }
+      if (!targetId || String(targetId) === String(me.id)) return;
+
+      // トグル（script.js の関数を使用）
+      if ((me.following||[]).includes(targetId)) {
+        if (typeof unfollowUser === 'function') unfollowUser(targetId);
+      } else {
+        if (typeof followUser === 'function') followUser(targetId);
       }
 
-      // ピッカー開閉
-      const openBtn = e.target.closest('.rx-add');
-      if (openBtn){
-        const pid = openBtn.getAttribute('data-open-picker');
-        const picker = document.getElementById(`picker-${CSS.escape(pid)}`);
-        if (picker){
-          const isOpen = picker.classList.contains('open');
-          closeAllPickers();
-          if (!isOpen) picker.classList.add('open');
-        }
-        return;
-      }
+      // 同じ相手のボタン表記を一括更新
+      const latestFollowing = (getAuthUser()?.following||[]).includes(targetId);
+      document.querySelectorAll(button[data-follow-user="${CSS.escape(targetId)}"]).forEach(b=>{
+        b.classList.toggle('following', latestFollowing);
+        b.textContent = latestFollowing ? 'フォロー中' : 'フォローする';
+      });
 
-      // ピッカーでスタンプ選択
-      const pick = e.target.closest('.rx-picker button');
-      if(pick){
-        const picker = pick.closest('.rx-picker');
-        const pid = picker?.getAttribute('data-picker-for');
-        const name = pick.getAttribute('data-stamp');
-        if(!pid || !name) return;
-
-        // UI 反映：カードの rx-stamps に画像を追加（重複は 1 個に）
-        const card = picker.closest('.feed-card');
-        const row = card.querySelector('.rx-stamps');
-        let slot = row.querySelector(`[data-stamp="${CSS.escape(name)}"]`);
-        if(!slot){
-          slot = document.createElement('span');
-          slot.className = 'stamp-item';
-          slot.setAttribute('data-stamp', name);
-          const img = document.createElement('img');
-          const {first, rest} = resolveStampSrc(name);
-          img.alt = name;
-          img.src = first;
-          chainOnError(img, rest);
-          slot.appendChild(img);
-          row.appendChild(slot);
-        }
-        closeAllPickers();
-
-        // 可能ならサーバーにも送る（失敗しても UI は維持）
-        (async ()=>{
-          const payload = { id: pid, stamp: name };
-          try{
-            let res = await fetch('/api/posts/react', {
-              method:'POST', credentials:'include',
-              headers:{'Content-Type':'application/json'},
-              body: JSON.stringify(payload)
-            });
-            if(res.status===404){
-              res = await fetch(`/api/posts/${encodeURIComponent(pid)}/react`, {
-                method:'POST', credentials:'include',
-                headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ stamp:name })
-              });
-            }
-            // 成功/失敗は黙っておく（仕様維持）
-          }catch{}
-        })();
-
-        return;
-      }
-
-      // ピッカー外クリックで閉じる
-      if(!e.target.closest('.rx-picker') && !e.target.closest('.rx-add')){
-        closeAllPickers();
-      }
+      // settings.html の一覧も即反映（あれば）
+      if (typeof renderFollowBoxesSafe === 'function') renderFollowBoxesSafe();
     });
 
     document.getElementById('kw')?.addEventListener('input', async ()=>{
