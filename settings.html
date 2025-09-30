@@ -33,37 +33,26 @@
     #profileView .meta{font-size:13px;color:#6b7280}
     #profileView .bio{margin-top:4px}
 
-    /* --- フォロー一覧をタブの「下」に縦積み表示 --- */
-    .follow-tabs{ display:block !important; align-items:unset !important; justify-content:unset !important; }
-    .follow-tabs .tabbar{ display:flex !important; gap:12px; align-items:center; margin-bottom:8px; position:relative; }
+    /* --- フォロー一覧をタブの「下」に縦積み表示（既存方針を維持） --- */
+    .follow-tabs{ 
+      display:block !important; 
+      align-items:unset !important; 
+      justify-content:unset !important; 
+    }
+    .follow-tabs .tabbar{ 
+      display:flex !important; 
+      gap:12px; 
+      align-items:center; 
+      margin-bottom:8px; 
+      position:relative; 
+      /* ★ タブ見出し（フォロワー／フォロー中）を中央寄せ */
+      justify-content:center !important;
+    }
     .follow-tabs .tab-underline{ position:absolute; bottom:-2px; left:0; height:2px; width:50%; }
-    .follow-tabs .tabpanel{ display:block !important; width:100% !important; clear:both !important; margin-top:6px; }
+    .follow-tabs .tabpanel{ display:none !important; width:100% !important; clear:both !important; margin-top:6px; opacity:0; transition:opacity .12s ease; }
+    .follow-tabs .tabpanel.show{ display:block !important; opacity:1; }
     .follow-tabs .follow-stats.under{ display:block !important; margin:6px 0 10px; clear:both !important; }
     #followingList, #followersList{ display:block !important; }
-
-    /* --- タブ切替が効くように表示/非表示を .show で制御（強制上書き） --- */
-  .follow-tabs .tabpanel { 
-    display: none !important;        /* まず両方隠す */
-  }
-  .follow-tabs .tabpanel.show {
-    display: block !important;       /* 選択中だけ表示 */
-  }
-
-  /* アニメっぽく切替したい場合はオプションで */
-  .follow-tabs .tabpanel {
-    opacity: 0; transition: opacity .12s ease;
-  }
-  .follow-tabs .tabpanel.show {
-    opacity: 1;
-  }
-
-    /* フォロワー / フォロー中 タブを中央寄せ */
-.follow-tabs {
-  display: flex;
-  justify-content: center;
-  gap: 16px; /* 文字の間隔を少し広げたい場合 */
-}
-    
   </style>
 </head>
 <body>
@@ -203,7 +192,15 @@
     const AVA_FALLBACK_DATAURI =
       'data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 84 84"><circle cx="42" cy="42" r="42" fill="%23f1f5f9"/><circle cx="42" cy="34" r="14" fill="%23cbd5e1"/><rect x="16" y="52" width="52" height="20" rx="10" fill="%23cbd5e1"/></svg>';
 
-    function esc(s){return (s||'').replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;"," >":"&gt;","\"":"&quot;","'":"&#39;"}[m]))}
+    function esc(s){
+      return (s||'').replace(/[&<>"']/g, m => ({
+        "&":"&amp;",
+        "<":"&lt;",
+        ">":"&gt;",
+        "\"":"&quot;",
+        "'":"&#39;"
+      }[m]));
+    }
 
     /* ===== 共通：現在ユーザー ===== */
     async function fetchActiveUser(){
