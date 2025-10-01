@@ -50,6 +50,8 @@ function registerUser(email, pass, {nickname='匿名'}={}) {
   };
   users.push(user); saveUsers(users); setAuthId(id);
   localStorage.setItem("profile", JSON.stringify(user.profile));
+  // ★通知バッジ即時更新
+  try{ updateNotifBadge(); }catch(_){}
   return true;
 }
 function loginUser(email, pass){
@@ -57,9 +59,11 @@ function loginUser(email, pass){
   if(!u) return false;
   setAuthId(u.id);
   localStorage.setItem("profile", JSON.stringify(u.profile));
+  // ★通知バッジ即時更新
+  try{ updateNotifBadge(); }catch(_){}
   return true;
 }
-function logoutUser(){ setAuthId(""); }
+function logoutUser(){ setAuthId(""); try{ updateNotifBadge(); }catch(_{}) }  // ★通知バッジ即時更新
 
 /* ------------ Follow ------------ */
 function followUser(targetId){
@@ -132,7 +136,7 @@ function buildOwnerInfoByZange(z){
   // 「完全に自分の投稿か？」（ownerId が一致する場合だけ“自分扱い”にする）
   const isMyExact = !!(me && z.ownerId && String(z.ownerId) === String(me.id));
 
-  // --- デバッグ出力（1回だけ見たい場合は適宜コメントアウト） ---
+  // --- デバッグ出力 ---
   console.debug("[followbtn] post", z.id, {
     nickname, ownerId:z.ownerId, resolvedOwnerId,
     meId: me?.id, isMyExact,
@@ -406,7 +410,7 @@ function react(id,type){
     const label={pray:"🙏",laugh:"😂",sympathy:"🤝",growth:"🌱"}[type];
     const actor=me.profile?.nickname||me.email||"ユーザー";
     addNotificationFor(z.ownerId,{type:"reaction",text:`${actor} さんがあなたの投稿に ${label}`,postId:z.id,url:`detail.html?id=${z.id}`});
-    updateNotifBadge();
+    updateNotifBadge(); // ★自タブは即更新（他タブは storage イベントで同期）
   }
 }
 
@@ -425,7 +429,7 @@ function reactStamp(id,key){
     const info=STAMP_CATALOG.find(s=>s.key===key);
     const actor=me.profile?.nickname||me.email||"ユーザー";
     addNotificationFor(z.ownerId,{type:"reaction",text:`${actor} さんがあなたの投稿にスタンプ（${info?.label||key}）`,postId:z.id,url:`detail.html?id=${z.id}`});
-    updateNotifBadge();
+    updateNotifBadge(); // ★同上
   }
 }
 
@@ -736,6 +740,17 @@ function updateNotifBadge(){
   else badge.style.display="none";
 }
 document.addEventListener("DOMContentLoaded", updateNotifBadge);
+
+// ★追加: localStorage の変更（他タブ）でバッジを即更新
+window.addEventListener("storage",(e)=>{
+  if(e && typeof e.key==="string" && /^notifications_/.test(e.key)) updateNotifBadge();
+});
+// ★追加: タブ復帰/可視時に再計算
+window.addEventListener("focus", updateNotifBadge);
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) updateNotifBadge(); });
+// ★追加: 保険で30秒おきに再計算（軽量）
+setInterval(updateNotifBadge, 30000);
+
 ;(function initNotificationsPage(){
   const list=document.getElementById("notificationList"); if(!list) return;
   const me=getAuthUser(); if(!me){ list.innerHTML="<p>通知を見るにはログインしてください。</p>"; return; }
@@ -985,15 +1000,12 @@ async function initProfileUI(){
   const edit=document.getElementById("profileEdit");
   if(!view || !edit) return;
 
-  // ★ 追加：サーバーセッションがあれば、そのユーザーのメールを
-  //   アクティブなプロフィール所有者として同期（無ければ何もしない）
+  // ★ 追加：サーバーセッションがあれば、所有者同期
   if (typeof fetchMe === "function") {
     try {
       const me = await fetchMe();
       if (me && me.email) setActiveProfileOwner(me.email);
-    } catch (e) {
-      // fetchMe が失敗してもローカル保存のプロフィールで続行
-    }
+    } catch (e) {}
   }
 
   function renderProfileView(p){
@@ -1022,7 +1034,6 @@ async function initProfileUI(){
     if(prev) prev.src=p.avatar||"images/default-avatar.png";
   }
 
-  // ここで改めて現在のプロフィールを取得して描画
   const p=getProfile();
   renderProfileView(p);
   renderProfileEdit(p);
@@ -1041,7 +1052,6 @@ async function initProfileUI(){
     };
     saveProfile(payload);
 
-    // ローカルユーザー一覧（旧仕様）側も同期
     const me=getAuthUser();
     if(me){
       const users=getUsers(); const i=users.findIndex(u=>u.id===me.id);
@@ -1322,6 +1332,8 @@ async function registerUser(email, pass, { nickname = "" } = {}) {
         bio: ""
       });
     }
+    // ★通知バッジ即時更新
+    try{ updateNotifBadge(); }catch(_){}
     return true;
   }
   return false;
@@ -1349,7 +1361,9 @@ async function loginUser(email, pass) {
       });
     }
     // サーバー版 loginUser 内の return true の直前あたりに1行追加
-ensureLocalAuthFromActiveOwner();
+    ensureLocalAuthFromActiveOwner();
+    // ★通知バッジ即時更新
+    try{ updateNotifBadge(); }catch(_){}
     return true;
   }
   return false;
@@ -1359,6 +1373,8 @@ async function logoutUser() {
   await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
   // アクティブオーナーを解除（次回は旧互換の "profile" を参照）
   setActiveProfileOwner("");
+  // ★通知バッジ即時更新
+  try{ updateNotifBadge(); }catch(_){}
   return true;
 }
 
