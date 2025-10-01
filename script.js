@@ -1,4 +1,4 @@
-/* ======================= ZANGE script.js (All-in-one) ======================= */
+* ======================= ZANGE script.js (All-in-one) ======================= */
 /* ------------ Storage helpers ------------ */
 function getZanges(){ return JSON.parse(localStorage.getItem("zanges")||"[]"); }
 function saveZanges(z){ localStorage.setItem("zanges", JSON.stringify(z||[])); }
@@ -50,8 +50,6 @@ function registerUser(email, pass, {nickname='匿名'}={}) {
   };
   users.push(user); saveUsers(users); setAuthId(id);
   localStorage.setItem("profile", JSON.stringify(user.profile));
-  // ★通知バッジ即時更新
-  try{ updateNotifBadge(); }catch(_){}
   return true;
 }
 function loginUser(email, pass){
@@ -59,11 +57,9 @@ function loginUser(email, pass){
   if(!u) return false;
   setAuthId(u.id);
   localStorage.setItem("profile", JSON.stringify(u.profile));
-  // ★通知バッジ即時更新
-  try{ updateNotifBadge(); }catch(_){}
   return true;
 }
-function logoutUser(){ setAuthId(""); try{ updateNotifBadge(); }catch(_{}) }  // ★通知バッジ即時更新
+function logoutUser(){ setAuthId(""); }
 
 /* ------------ Follow ------------ */
 function followUser(targetId){
@@ -85,7 +81,7 @@ function unfollowUser(targetId){
 }
 
 /* ------------ Misc helpers ------------ */
-function formatYMD(ts){ const d=new Date(ts); return `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`; }
+function formatYMD(ts){ const d=new Date(ts); return ${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}; }
 function isMyPost(z){
   const me=getAuthUser();
   if(me && z.ownerId && String(z.ownerId)===String(me.id)) return true;
@@ -136,7 +132,7 @@ function buildOwnerInfoByZange(z){
   // 「完全に自分の投稿か？」（ownerId が一致する場合だけ“自分扱い”にする）
   const isMyExact = !!(me && z.ownerId && String(z.ownerId) === String(me.id));
 
-  // --- デバッグ出力 ---
+  // --- デバッグ出力（1回だけ見たい場合は適宜コメントアウト） ---
   console.debug("[followbtn] post", z.id, {
     nickname, ownerId:z.ownerId, resolvedOwnerId,
     meId: me?.id, isMyExact,
@@ -177,7 +173,7 @@ function buildOwnerInfoByZange(z){
         : followUser(resolvedOwnerId);
 
       const latest = (getAuthUser()?.following || []).includes(resolvedOwnerId);
-      document.querySelectorAll(`button[data-follow-user="${resolvedOwnerId}"]`)
+      document.querySelectorAll(button[data-follow-user="${resolvedOwnerId}"])
         .forEach(b => { b.textContent = latest ? "フォロー中" : "フォローする"; b.disabled = false; });
 
       if (typeof renderFollowBoxesSafe === "function") renderFollowBoxesSafe();
@@ -300,7 +296,7 @@ function buildStampCandidates(basename){
   const urls = [];
   STAMP_BASE_DIRS.forEach(dir=>{
     const base = dir.replace(/\/$/,'');
-    exts.forEach(ext=> urls.push(`${base}/${basename}.${ext}`));
+    exts.forEach(ext=> urls.push(${base}/${basename}.${ext}));
   });
   return urls;
 }
@@ -322,12 +318,12 @@ function skinReactionButtons(root = document){
       ? btn.querySelector('.rx-count').textContent
       : (btn.textContent.trim().split(/\s+/)[1] || '0');
 
-    btn.classList.add('rx-btn',`rx-${type}`);
-    btn.innerHTML = `
+    btn.classList.add('rx-btn',rx-${type});
+    btn.innerHTML = 
       <img class="rx-ic" alt="" style="width:22px;height:22px;vertical-align:middle;display:none;">
       <span class="rx-fallback" aria-hidden="false" style="font-size:18px;line-height:1;">${MAP[type].emoji}</span>
       <span class="rx-count" style="margin-left:6px;">${current}</span>
-    `;
+    ;
     const img=btn.querySelector('.rx-ic'); const fb=btn.querySelector('.rx-fallback');
     if(img){
       img.onload=()=>{ img.style.display='inline-block'; fb.style.display='none'; };
@@ -339,7 +335,7 @@ function skinReactionButtons(root = document){
 
 /* ---- Ensure "+" button ---- */
 function ensurePlusButton(host, postId){
-  if(host.querySelector(`button.rx-add[data-post="${postId}"]`)) return;
+  if(host.querySelector(button.rx-add[data-post="${postId}"])) return;
   const plus=document.createElement('button');
   plus.className='rx-add'; plus.dataset.post=String(postId); plus.type='button';
   plus.textContent='＋'; plus.setAttribute('aria-label','スタンプを追加');
@@ -349,23 +345,23 @@ function ensurePlusButton(host, postId){
 
 /* ---- Ensure a custom-stamp button exists in host ---- */
 function ensureCustomStampButtonInHost(host, postId, key, count){
-  if (host.querySelector(`button[onclick="reactStamp(${postId}, '${key}')"]`)) return;
+  if (host.querySelector(button[onclick="reactStamp(${postId}, '${key}')"])) return;
   const info = STAMP_CATALOG.find(x => x.key === key); if (!info) return;
 
   const btn=document.createElement('button');
   btn.className='rx-btn'; btn.type='button';
-  btn.setAttribute('onclick',`reactStamp(${postId}, '${key}')`);
-  btn.innerHTML=`
+  btn.setAttribute('onclick',reactStamp(${postId}, '${key}'));
+  btn.innerHTML=
     <img class="rx-ic" alt="${info.label}" style="width:22px;height:22px;vertical-align:middle;display:none;">
     <span class="rx-text" style="font-size:12px;padding:2px 6px;border-radius:10px;background:#f1f5f9;display:inline;">${info.label}</span>
     <span class="rx-count" style="margin-left:6px;">${count||0}</span>
-  `;
+  ;
   const img=btn.querySelector('.rx-ic'); const text=btn.querySelector('.rx-text');
   if(img){
     const cands=buildStampCandidates(info.basename);
     loadImgWithFallback(img,cands,()=>{ text.style.display='none'; },()=>{ text.style.display='inline'; });
   }
-  const plus=host.querySelector(`button.rx-add[data-post="${postId}"]`);
+  const plus=host.querySelector(button.rx-add[data-post="${postId}"]);
   if(plus) host.insertBefore(btn,plus); else host.appendChild(btn);
 }
 
@@ -383,13 +379,13 @@ function finishReactionsRender(hostOrCard, zange){
 
 /* ---- Update count helper ---- */
 function updateStampCountDisplay(postId,key,count){
-  document.querySelectorAll(`button[onclick="reactStamp(${postId}, '${key}')"] .rx-count`)
+  document.querySelectorAll(button[onclick="reactStamp(${postId}, '${key}')"] .rx-count)
     .forEach(span=>span.textContent=count);
 }
 
 /* ---- Lookup all hosts for this post and add button if missing ---- */
 function addButtonToAllHosts(postId,key,count){
-  const anchors=document.querySelectorAll(`button[onclick^="react(${postId},"]`);
+  const anchors=document.querySelectorAll(button[onclick^="react(${postId},"]);
   const hosts=new Set(); anchors.forEach(a=>{ const h=a.closest('.reactions'); if(h) hosts.add(h); });
   hosts.forEach(h=>{ ensurePlusButton(h,postId); ensureCustomStampButtonInHost(h,postId,key,count); });
 }
@@ -399,18 +395,18 @@ function react(id,type){
   const zanges=getZanges(); const z=zanges.find(x=>x.id===id); if(!z) return;
   z.reactions[type]=(z.reactions[type]||0)+1; saveZanges(zanges);
 
-  document.querySelectorAll(`button[onclick="react(${id}, '${type}')"]`).forEach(btn=>{
+  document.querySelectorAll(button[onclick="react(${id}, '${type}')"]).forEach(btn=>{
     const span=btn.querySelector('.rx-count');
     if(span){ span.textContent=z.reactions[type]; }
-    else{ btn.textContent=`${btn.textContent.split(" ")[0]} ${z.reactions[type]}`; }
+    else{ btn.textContent=${btn.textContent.split(" ")[0]} ${z.reactions[type]}; }
   });
 
   const me=getAuthUser();
   if(z.ownerId && me && me.id!==z.ownerId){
     const label={pray:"🙏",laugh:"😂",sympathy:"🤝",growth:"🌱"}[type];
     const actor=me.profile?.nickname||me.email||"ユーザー";
-    addNotificationFor(z.ownerId,{type:"reaction",text:`${actor} さんがあなたの投稿に ${label}`,postId:z.id,url:`detail.html?id=${z.id}`});
-    updateNotifBadge(); // ★自タブは即更新（他タブは storage イベントで同期）
+    addNotificationFor(z.ownerId,{type:"reaction",text:${actor} さんがあなたの投稿に ${label},postId:z.id,url:detail.html?id=${z.id}});
+    updateNotifBadge();
   }
 }
 
@@ -428,8 +424,8 @@ function reactStamp(id,key){
   if(z.ownerId && me && me.id!==z.ownerId){
     const info=STAMP_CATALOG.find(s=>s.key===key);
     const actor=me.profile?.nickname||me.email||"ユーザー";
-    addNotificationFor(z.ownerId,{type:"reaction",text:`${actor} さんがあなたの投稿にスタンプ（${info?.label||key}）`,postId:z.id,url:`detail.html?id=${z.id}`});
-    updateNotifBadge(); // ★同上
+    addNotificationFor(z.ownerId,{type:"reaction",text:${actor} さんがあなたの投稿にスタンプ（${info?.label||key}）,postId:z.id,url:detail.html?id=${z.id}});
+    updateNotifBadge();
   }
 }
 
@@ -485,7 +481,7 @@ if(timeline){
     lineTargets.appendChild(document.createTextNode("🙏："));
     const tItems=Array.isArray(z.targets)&&z.targets.length?z.targets:(((z.target||"").replace(/への懺悔$/u,"").trim())?[(z.target||"").replace(/への懺悔$/u,"").trim()]:[]);
     if(tItems.length===0) lineTargets.appendChild(document.createTextNode("—"));
-    else tItems.forEach(t=>{ const a=document.createElement("a"); a.href=`search.html?q=${encodeURIComponent(t)}`; a.textContent=t;
+    else tItems.forEach(t=>{ const a=document.createElement("a"); a.href=search.html?q=${encodeURIComponent(t)}; a.textContent=t;
       Object.assign(a.style,{textDecoration:"none",padding:"2px 6px",marginRight:"6px",borderRadius:"999px",background:"#f1f5f9",display:"inline-block",fontSize:"12px"});
       lineTargets.appendChild(a);
     });
@@ -497,7 +493,7 @@ if(timeline){
       ? (z.futureTag||"").replace(/[＃#]/g,"").split(/[,\uff0c、\s]+/u).map(s=>s.trim()).filter(Boolean)
       : []);
     if(tagItems.length===0) lineTags.appendChild(document.createTextNode("—"));
-    else tagItems.forEach(tag=>{ const a=document.createElement("a"); a.href=`search.html?q=${encodeURIComponent(tag)}`; a.textContent=tag;
+    else tagItems.forEach(tag=>{ const a=document.createElement("a"); a.href=search.html?q=${encodeURIComponent(tag)}; a.textContent=tag;
       Object.assign(a.style,{textDecoration:"none",padding:"2px 6px",marginRight:"6px",borderRadius:"999px",background:"#f1f5f9",display:"inline-block",fontSize:"12px"});
       lineTags.appendChild(a);
     });
@@ -505,19 +501,19 @@ if(timeline){
 
     const reactions=document.createElement("div");
     reactions.className="reactions";
-    reactions.innerHTML=`
+    reactions.innerHTML=
       <button type="button" onclick="react(${z.id}, 'pray')">🙏 ${z.reactions.pray}</button>
       <button type="button" onclick="react(${z.id}, 'laugh')">😂 ${z.reactions.laugh}</button>
       <button type="button" onclick="react(${z.id}, 'sympathy')">🤝 ${z.reactions.sympathy}</button>
       <button type="button" onclick="react(${z.id}, 'growth')">🌱 ${z.reactions.growth}</button>
-    `;
+    ;
     card.appendChild(reactions);
     finishReactionsRender(card, z);
 
     const commentsCount=Array.isArray(z.comments)?z.comments.length:0;
     const commentLink=document.createElement("a");
-    commentLink.href=`detail.html?id=${z.id}`;
-    commentLink.textContent=`💬 コメント（${commentsCount}）`;
+    commentLink.href=detail.html?id=${z.id};
+    commentLink.textContent=💬 コメント（${commentsCount}）;
     Object.assign(commentLink.style,{display:"inline-block",marginTop:"8px",textDecoration:"none"});
     card.appendChild(commentLink);
 
@@ -526,7 +522,7 @@ if(timeline){
       z.comments.slice(-2).forEach(c=>{
         const row=document.createElement("div"); row.className="c-row";
         Object.assign(row.style,{fontSize:"13px",color:"#667085",marginTop:"4px"});
-        row.textContent=`・${(c.user||"匿名").trim()}: ${(c.text||"").trim()}`;
+        row.textContent=・${(c.user||"匿名").trim()}: ${(c.text||"").trim()};
         pv.appendChild(row);
       });
       card.appendChild(pv);
@@ -549,12 +545,12 @@ if(timeline){
   if(typeof z.bg==='string' && z.bg.trim()!==''){ const vis=document.createElement('div'); vis.className='zange-visual';
     const img=document.createElement('img'); img.src='images/'+z.bg; img.alt='背景画像'; vis.appendChild(img); card.appendChild(vis); }
   const cap=document.createElement('div'); cap.className='zange-caption'; cap.textContent=z.text; card.appendChild(cap);
-  const date=document.createElement('small'); date.textContent=`${formatYMD(z.timestamp)}`; card.appendChild(date);
+  const date=document.createElement('small'); date.textContent=${formatYMD(z.timestamp)}; card.appendChild(date);
 
   const lineTargets=document.createElement('small'); lineTargets.appendChild(document.createTextNode('🙏：'));
   const tItems=Array.isArray(z.targets)&&z.targets.length?z.targets:(((z.target||'').replace(/への懺悔$/u,'').trim())?[(z.target||'').replace(/への懺悔$/u,'').trim()]:[]);
   if(tItems.length===0) lineTargets.appendChild(document.createTextNode('—'));
-  else tItems.forEach(t=>{ const a=document.createElement('a'); a.href=`search.html?q=${encodeURIComponent(t)}`; a.textContent=t;
+  else tItems.forEach(t=>{ const a=document.createElement('a'); a.href=search.html?q=${encodeURIComponent(t)}; a.textContent=t;
     Object.assign(a.style,{textDecoration:'none',padding:'2px 6px',marginRight:'6px',borderRadius:'999px',background:'#f1f5f9',display:'inline-block',fontSize:'12px'});
     lineTargets.appendChild(a); });
   card.appendChild(lineTargets);
@@ -562,18 +558,18 @@ if(timeline){
   const lineTags=document.createElement('small'); lineTags.appendChild(document.createTextNode('🏷️：'));
   const tagItems=((z.futureTag||'').trim()? (z.futureTag||'').replace(/[＃#]/g,'').split(/[,\uff0c、\s]+/u).map(s=>s.trim()).filter(Boolean):[]);
   if(tagItems.length===0) lineTags.appendChild(document.createTextNode('—'));
-  else tagItems.forEach(tag=>{ const a=document.createElement('a'); a.href=`search.html?q=${encodeURIComponent(tag)}`; a.textContent=tag;
+  else tagItems.forEach(tag=>{ const a=document.createElement('a'); a.href=search.html?q=${encodeURIComponent(tag)}; a.textContent=tag;
     Object.assign(a.style,{textDecoration:'none',padding:'2px 6px',marginRight:'6px',borderRadius:'999px',background:'#f1f5f9',display:'inline-block',fontSize:'12px'});
     lineTags.appendChild(a); });
   card.appendChild(lineTags);
 
   const reactions=document.createElement('div'); reactions.className='reactions';
-  reactions.innerHTML=`
+  reactions.innerHTML=
     <button type="button" onclick="react(${z.id}, 'pray')">🙏 ${z.reactions.pray}</button>
     <button type="button" onclick="react(${z.id}, 'laugh')">😂 ${z.reactions.laugh}</button>
     <button type="button" onclick="react(${z.id}, 'sympathy')">🤝 ${z.reactions.sympathy}</button>
     <button type="button" onclick="react(${z.id}, 'growth')">🌱 ${z.reactions.growth}</button>
-  `;
+  ;
   card.appendChild(reactions);
   finishReactionsRender(card, z);
 
@@ -587,7 +583,7 @@ if(timeline){
     if(comments.length===0){ wrap.innerHTML='<p class="muted">まだコメントはありません。</p>'; return; }
     comments.forEach(c=>{
       const item=document.createElement('div'); item.className='comment';
-      const meta=document.createElement('small'); meta.textContent=`${(c.user||'匿名')}・${new Date(c.ts||Date.now()).toLocaleString()}`;
+      const meta=document.createElement('small'); meta.textContent=${(c.user||'匿名')}・${new Date(c.ts||Date.now()).toLocaleString()};
       const body=document.createElement('div'); body.textContent=c.text||'';
       item.appendChild(meta); item.appendChild(body); wrap.appendChild(item);
     });
@@ -615,7 +611,7 @@ if(timeline){
       const me=getAuthUser();
       if(target.ownerId && me && me.id!==target.ownerId){
         const actor=me.profile?.nickname||me.email||name||'ユーザー';
-        addNotificationFor(target.ownerId,{type:'comment',text:`${actor} さんがあなたの投稿にコメントしました`,postId:target.id,url:`detail.html?id=${target.id}`});
+        addNotificationFor(target.ownerId,{type:'comment',text:${actor} さんがあなたの投稿にコメントしました,postId:target.id,url:detail.html?id=${target.id}});
         updateNotifBadge();
       }
     });
@@ -628,7 +624,7 @@ if(timeline){
               document.querySelector('[data-role="searchBox"]')||
               document.querySelector('#headerSearch')||
               document.querySelector('input[type="search"]');
-  const goSearch=()=>{ if(!box) return; const q=(box.value||'').trim(); location.href=q?`search.html?q=${encodeURIComponent(q)}`:'search.html'; };
+  const goSearch=()=>{ if(!box) return; const q=(box.value||'').trim(); location.href=q?search.html?q=${encodeURIComponent(q)}:'search.html'; };
   if(box){ box.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); goSearch(); } }); document.getElementById('searchButton')?.addEventListener('click',goSearch); }
 
   const results=document.getElementById('searchResults'); if(!results) return;
@@ -658,12 +654,12 @@ if(timeline){
       vis.appendChild(img); card.appendChild(vis); }
 
     const cap=document.createElement('div'); cap.className='zange-caption'; cap.textContent=z.text; card.appendChild(cap);
-    const date=document.createElement('small'); date.textContent=`${formatYMD(z.timestamp)}`; card.appendChild(date);
+    const date=document.createElement('small'); date.textContent=${formatYMD(z.timestamp)}; card.appendChild(date);
 
     const lineTargets=document.createElement('small'); lineTargets.appendChild(document.createTextNode('🙏：'));
     const tItems=Array.isArray(z.targets)&&z.targets.length?z.targets:(((z.target||'').replace(/への懺悔$/u,'').trim())?[(z.target||'').replace(/への懺悔$/u,'').trim()]:[]);
     if(tItems.length===0) lineTargets.appendChild(document.createTextNode('—'));
-    else tItems.forEach(t=>{ const a=document.createElement('a'); a.href=`search.html?q=${encodeURIComponent(t)}`; a.textContent=t;
+    else tItems.forEach(t=>{ const a=document.createElement('a'); a.href=search.html?q=${encodeURIComponent(t)}; a.textContent=t;
       Object.assign(a.style,{textDecoration:'none',padding:'2px 6px',marginRight:'6px',borderRadius:'999px',background:'#f1f5f9',display:'inline-block',fontSize:'12px'});
       lineTargets.appendChild(a); });
     card.appendChild(lineTargets);
@@ -671,12 +667,12 @@ if(timeline){
     const lineTags=document.createElement('small'); lineTags.appendChild(document.createTextNode('🏷️：'));
     const tagItems=((z.futureTag||'').trim()? (z.futureTag||'').replace(/[＃#]/g,'').split(/[,\uff0c、\s]+/u).map(s=>s.trim()).filter(Boolean):[]);
     if(tagItems.length===0) lineTags.appendChild(document.createTextNode('—'));
-    else tagItems.forEach(tag=>{ const a=document.createElement('a'); a.href=`search.html?q=${encodeURIComponent(tag)}`; a.textContent=tag;
+    else tagItems.forEach(tag=>{ const a=document.createElement('a'); a.href=search.html?q=${encodeURIComponent(tag)}; a.textContent=tag;
       Object.assign(a.style,{textDecoration:'none',padding:'2px 6px',marginRight:'6px',borderRadius:'999px',background:'#f1f5f9',display:'inline-block',fontSize:'12px'});
       lineTags.appendChild(a); });
     card.appendChild(lineTags);
 
-    const link=document.createElement('a'); link.href=`detail.html?id=${z.id}`; link.textContent='💬 コメントを見る/書く';
+    const link=document.createElement('a'); link.href=detail.html?id=${z.id}; link.textContent='💬 コメントを見る/書く';
     Object.assign(link.style,{display:'inline-block',marginTop:'8px'}); card.appendChild(link);
 
     finishReactionsRender(card, z);
@@ -696,8 +692,8 @@ function getTodayTopics(){
   const topics=getTodayTopics(); host.innerHTML='';
   topics.forEach(t=>{
     const chip=document.createElement('div'); chip.className='topic-chip';
-    chip.innerHTML=`<span class="t-label">#${t}</span><a class="t-post" href="post.html?topic=${encodeURIComponent(t)}" title="このお題で投稿">🙏</a>`;
-    chip.querySelector('.t-label').addEventListener('click',(e)=>{ e.preventDefault(); location.href=`post.html?topic=${encodeURIComponent(t)}`; });
+    chip.innerHTML=<span class="t-label">#${t}</span><a class="t-post" href="post.html?topic=${encodeURIComponent(t)}" title="このお題で投稿">🙏</a>;
+    chip.querySelector('.t-label').addEventListener('click',(e)=>{ e.preventDefault(); location.href=post.html?topic=${encodeURIComponent(t)}; });
     host.appendChild(chip);
   });
 })();
@@ -705,10 +701,10 @@ function getTodayTopics(){
   const form=document.getElementById('postForm'); if(!form) return;
   const params=new URLSearchParams(location.search); const topic=params.get('topic'); if(!topic) return;
   const ta=document.getElementById('zangeText'); const tag=document.getElementById('futureTag');
-  if(ta && !ta.value){ ta.value=`#お題「${topic}」 `; ta.dispatchEvent(new Event('input',{bubbles:true})); }
+  if(ta && !ta.value){ ta.value=#お題「${topic}」 ; ta.dispatchEvent(new Event('input',{bubbles:true})); }
   if(tag){
     const t=topic.replace(/^#+/,''); const now=(tag.value||'').trim();
-    const tokens=now?now.replace(/[＃#]/g,'#').split(/[,\s、]+/).filter(Boolean):[]; const token=`#${t}`;
+    const tokens=now?now.replace(/[＃#]/g,'#').split(/[,\s、]+/).filter(Boolean):[]; const token=#${t};
     if(!tokens.map(x=>x.toLowerCase()).includes(token.toLowerCase())) tokens.push(token);
     tag.value=tokens.join(' ');
   }
@@ -740,17 +736,6 @@ function updateNotifBadge(){
   else badge.style.display="none";
 }
 document.addEventListener("DOMContentLoaded", updateNotifBadge);
-
-// ★追加: localStorage の変更（他タブ）でバッジを即更新
-window.addEventListener("storage",(e)=>{
-  if(e && typeof e.key==="string" && /^notifications_/.test(e.key)) updateNotifBadge();
-});
-// ★追加: タブ復帰/可視時に再計算
-window.addEventListener("focus", updateNotifBadge);
-document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) updateNotifBadge(); });
-// ★追加: 保険で30秒おきに再計算（軽量）
-setInterval(updateNotifBadge, 30000);
-
 ;(function initNotificationsPage(){
   const list=document.getElementById("notificationList"); if(!list) return;
   const me=getAuthUser(); if(!me){ list.innerHTML="<p>通知を見るにはログインしてください。</p>"; return; }
@@ -759,7 +744,7 @@ setInterval(updateNotifBadge, 30000);
   list.innerHTML="";
   items.forEach(n=>{
     const li=document.createElement("li"); li.className="card";
-    li.innerHTML=`<div>${n.text}</div><small>${new Date(n.ts).toLocaleString()}</small>${n.url?`<a href="${n.url}">投稿を開く</a>`:""}`;
+    li.innerHTML=<div>${n.text}</div><small>${new Date(n.ts).toLocaleString()}</small>${n.url?<a href="${n.url}">投稿を開く</a>:""};
     list.appendChild(li);
   });
   saveNotificationsFor(me.id, items.map(x=>({...x,read:true})));
@@ -911,18 +896,18 @@ async function renderHeaderAvatarOnly(){
   // 次に描く HTML を作成（丸アイコン専用）
   let nextHTML = "";
   if (info.loggedIn){
-    nextHTML = `
+    nextHTML = 
       <img
         src="${info.avatar || "images/default-avatar.png"}"
         alt="${(info.title||"ユーザー").replace(/"/g,"&quot;")}"
         title="${(info.title||"").replace(/"/g,"&quot;")}"
         class="header-avatar-img"
       >
-    `;
+    ;
   }else{
-    nextHTML = `
+    nextHTML = 
       <div class="header-avatar-fallback">未</div>
-    `;
+    ;
   }
 
   // 変化なければ描画スキップ
@@ -1000,12 +985,15 @@ async function initProfileUI(){
   const edit=document.getElementById("profileEdit");
   if(!view || !edit) return;
 
-  // ★ 追加：サーバーセッションがあれば、所有者同期
+  // ★ 追加：サーバーセッションがあれば、そのユーザーのメールを
+  //   アクティブなプロフィール所有者として同期（無ければ何もしない）
   if (typeof fetchMe === "function") {
     try {
       const me = await fetchMe();
       if (me && me.email) setActiveProfileOwner(me.email);
-    } catch (e) {}
+    } catch (e) {
+      // fetchMe が失敗してもローカル保存のプロフィールで続行
+    }
   }
 
   function renderProfileView(p){
@@ -1016,9 +1004,9 @@ async function initProfileUI(){
           b=document.getElementById("profileBioShow");
     if(a) a.src=p.avatar||"images/default-avatar.png";
     if(n) n.textContent=p.nickname||"匿名";
-    if(g) g.textContent=`性別: ${p.gender||"—"}`;
-    if(ag) ag.textContent=`年齢: ${p.age||"—"}`;
-    if(b) b.textContent=`自己紹介: ${p.bio||"—"}`;
+    if(g) g.textContent=性別: ${p.gender||"—"};
+    if(ag) ag.textContent=年齢: ${p.age||"—"};
+    if(b) b.textContent=自己紹介: ${p.bio||"—"};
   }
 
   function renderProfileEdit(p){
@@ -1034,6 +1022,7 @@ async function initProfileUI(){
     if(prev) prev.src=p.avatar||"images/default-avatar.png";
   }
 
+  // ここで改めて現在のプロフィールを取得して描画
   const p=getProfile();
   renderProfileView(p);
   renderProfileEdit(p);
@@ -1052,6 +1041,7 @@ async function initProfileUI(){
     };
     saveProfile(payload);
 
+    // ローカルユーザー一覧（旧仕様）側も同期
     const me=getAuthUser();
     if(me){
       const users=getUsers(); const i=users.findIndex(u=>u.id===me.id);
@@ -1089,29 +1079,29 @@ function renderMyPosts(){
   }
   list.sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
   host.innerHTML="";
-  if(list.length===0){ host.innerHTML=`<p class="muted">該当する投稿はありません。</p>`; return; }
+  if(list.length===0){ host.innerHTML=<p class="muted">該当する投稿はありません。</p>; return; }
 
   list.forEach(z=>{
     const card=document.createElement("div"); card.className="card my-post";
     const title=document.createElement("div"); title.className="zange-caption"; title.textContent=z.text; card.appendChild(title);
     const meta1=document.createElement("small");
     const tgt=Array.isArray(z.targets)?z.targets.join("、"):(z.target||"").replace(/への懺悔$/u,"");
-    meta1.textContent=`🙏：${tgt||"—"}`; meta1.style.display="block"; card.appendChild(meta1);
+    meta1.textContent=🙏：${tgt||"—"}; meta1.style.display="block"; card.appendChild(meta1);
     const meta2=document.createElement("small");
     const tags=(z.futureTag||"").replace(/[＃#]/g,"").split(/[,\uff0c、\s]+/u).map(s=>s.trim()).filter(Boolean).join("、");
-    meta2.textContent=`🏷️：${tags||"—"}`; meta2.style.display="block"; card.appendChild(meta2);
+    meta2.textContent=🏷️：${tags||"—"}; meta2.style.display="block"; card.appendChild(meta2);
 
     const ops=document.createElement("div"); ops.className="btn-row";
-    ops.innerHTML=`
+    ops.innerHTML=
       <button class="btn edit-btn">編集</button>
       <button class="btn primary save-btn" style="display:none">保存</button>
       <button class="btn danger delete-btn right">削除</button>
       <button class="btn share-btn">共有</button>
-    `;
+    ;
     card.appendChild(ops);
 
     const edit=document.createElement("div"); edit.className="edit-area";
-    edit.innerHTML=`
+    edit.innerHTML=
       <div class="field"><label>本文</label><textarea class="e-text" rows="3">${z.text}</textarea></div>
       <div class="row" style="margin-top:6px">
         <div class="field"><label>対象（カンマ区切り）</label><input class="e-targets" type="text" value="${(Array.isArray(z.targets)?z.targets.join(","):"").replace(/"/g,"&quot;")}"></div>
@@ -1119,7 +1109,7 @@ function renderMyPosts(){
         <div class="field" style="max-width:150px"><label>公開範囲</label>
           <select class="e-scope"><option value="public" ${z.scope==="public"?"selected":""}>全体公開</option><option value="private" ${z.scope==="private"?"selected":""}>非公開</option></select>
         </div>
-      </div>`;
+      </div>;
     card.appendChild(edit);
 
     const editBtn=ops.querySelector(".edit-btn"),
@@ -1137,16 +1127,16 @@ function renderMyPosts(){
       target.scope=edit.querySelector(".e-scope").value; saveZanges(arr);
 
       title.textContent=target.text;
-      meta1.textContent=`🙏：${(target.targets||[]).join("、")||"—"}`;
+      meta1.textContent=🙏：${(target.targets||[]).join("、")||"—"};
       const tags=(target.futureTag||"").replace(/[＃#]/g,"").split(/[,\uff0c、\s]+/u).map(s=>s.trim()).filter(Boolean).join("、");
-      meta2.textContent=`🏷️：${tags||"—"}`;
+      meta2.textContent=🏷️：${tags||"—"};
 
       card.classList.remove("editing"); editBtn.style.display="inline-block"; saveBtn.style.display="none"; alert("保存しました");
     });
     delBtn.addEventListener("click",()=>{ if(!confirm("この投稿を削除します。よろしいですか？")) return;
       let arr=getZanges(); arr=arr.filter(x=>x.id!==z.id); saveZanges(arr); card.remove(); });
     shareBtn.addEventListener("click", async ()=>{
-      const url=location.origin+location.pathname.replace(/[^/]+$/,"")+`detail.html?id=${z.id}`; const text=`${z.text}\n${url}`;
+      const url=location.origin+location.pathname.replace(/[^/]+$/,"")+detail.html?id=${z.id}; const text=${z.text}\n${url};
       try{ if(navigator.share) await navigator.share({title:"ZANGE",text,url}); else { await navigator.clipboard.writeText(text); alert("共有用テキストをコピーしました"); } }catch(_){}
     });
 
@@ -1164,7 +1154,7 @@ function renderFollowBoxesSafe(){
   const users=getUsers();
   const following=(me.following||[]).map(id=>users.find(u=>u.id===id)).filter(Boolean);
   const followers=(me.followers||[]).map(id=>users.find(u=>u.id===id)).filter(Boolean);
-  stats.textContent=`フォロー ${following.length} ・ フォロワー ${followers.length}`;
+  stats.textContent=フォロー ${following.length} ・ フォロワー ${followers.length};
 
   const render=(list,host,type)=>{
     host.innerHTML=''; if(list.length===0){ host.innerHTML='<p class="muted">なし</p>'; return; }
@@ -1172,7 +1162,7 @@ function renderFollowBoxesSafe(){
       const row=document.createElement('div'); Object.assign(row.style,{display:'flex',alignItems:'center',gap:'10px',padding:'6px 0',borderBottom:'1px solid #f0f0f0'});
       const img=document.createElement('img'); img.src=u.profile?.avatar||'images/default-avatar.png';
       Object.assign(img.style,{width:'32px',height:'32px',borderRadius:'50%',objectFit:'cover'}); row.appendChild(img);
-      const name=document.createElement('a'); name.href=`user.html?uid=${encodeURIComponent(u.id)}`; name.textContent=u.profile?.nickname||u.email||'ユーザー';
+      const name=document.createElement('a'); name.href=user.html?uid=${encodeURIComponent(u.id)}; name.textContent=u.profile?.nickname||u.email||'ユーザー';
       Object.assign(name.style,{textDecoration:'none',color:'inherit'}); row.appendChild(name);
 
       const me2=getAuthUser();
@@ -1183,7 +1173,7 @@ function renderFollowBoxesSafe(){
         btn.addEventListener('click',()=>{
           const now=getAuthUser(); if(!now){ alert('ログインが必要です'); return; }
           if(type==='following'){ unfollowUser(u.id); } else { if(!(now.following||[]).includes(u.id)) followUser(u.id); }
-          document.querySelectorAll(`button[data-follow-user="${u.id}"]`).forEach(b=>{
+          document.querySelectorAll(button[data-follow-user="${u.id}"]).forEach(b=>{
             const fnow=(getAuthUser()?.following||[]).includes(u.id);
             b.textContent = fnow ? 'フォロー中' : (type==='following' ? '外す' : 'フォローバック');
           });
@@ -1250,7 +1240,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       ((nowMe.following||[]).includes(u.id))?unfollowUser(u.id):followUser(u.id);
       const latest=(getAuthUser()?.following||[]).includes(u.id);
       btn.textContent=latest?'フォロー中':'フォローする';
-      document.querySelectorAll(`button[data-follow-user="${u.id}"]`).forEach(b=> b.textContent=latest?'フォロー中':'フォローする');
+      document.querySelectorAll(button[data-follow-user="${u.id}"]).forEach(b=> b.textContent=latest?'フォロー中':'フォローする');
       if(typeof renderFollowBoxesSafe==='function') renderFollowBoxesSafe();
     });
     row.appendChild(btn);
@@ -1269,30 +1259,30 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const head=buildOwnerInfoByZange(z); if(head) card.appendChild(head);
     if(typeof z.bg==='string' && z.bg.trim()!==''){ const vis=document.createElement('div'); vis.className='zange-visual'; const img=document.createElement('img'); img.src='images/'+z.bg; img.alt='背景画像'; vis.appendChild(img); card.appendChild(vis); }
     const cap=document.createElement('div'); cap.className='zange-caption'; cap.textContent=z.text; card.appendChild(cap);
-    const date=document.createElement('small'); date.textContent=`${formatYMD(z.timestamp)}`; card.appendChild(date);
+    const date=document.createElement('small'); date.textContent=${formatYMD(z.timestamp)}; card.appendChild(date);
 
     const lineTargets=document.createElement('small'); lineTargets.appendChild(document.createTextNode('🙏：'));
     const tItems=Array.isArray(z.targets)&&z.targets.length?z.targets:(((z.target||'').replace(/への懺悔$/u,'').trim())?[(z.target||'').replace(/への懺悔$/u,'').trim()]:[]);
     if(tItems.length===0) lineTargets.appendChild(document.createTextNode('—'));
-    else tItems.forEach(t=>{ const a=document.createElement('a'); a.href=`search.html?q=${encodeURIComponent(t)}`; a.textContent=t;
+    else tItems.forEach(t=>{ const a=document.createElement('a'); a.href=search.html?q=${encodeURIComponent(t)}; a.textContent=t;
       Object.assign(a.style,{textDecoration:'none',padding:'2px 6px',marginRight:'6px',borderRadius:'999px',background:'#f1f5f9',display:'inline-block',fontSize:'12px'}); lineTargets.appendChild(a); });
     card.appendChild(lineTargets);
 
     const lineTags=document.createElement('small'); lineTags.appendChild(document.createTextNode('🏷️：'));
     const tagItems=((z.futureTag||'').trim()? (z.futureTag||'').replace(/[＃#]/g,'').split(/[,\uff0c、\s]+/u).map(s=>s.trim()).filter(Boolean):[]);
     if(tagItems.length===0) lineTags.appendChild(document.createTextNode('—'));
-    else tagItems.forEach(tag=>{ const a=document.createElement('a'); a.href=`search.html?q=${encodeURIComponent(tag)}`; a.textContent=tag;
+    else tagItems.forEach(tag=>{ const a=document.createElement('a'); a.href=search.html?q=${encodeURIComponent(tag)}; a.textContent=tag;
       Object.assign(a.style,{textDecoration:'none',padding:'2px 6px',marginRight:'6px',borderRadius:'999px',background:'#f1f5f9',display:'inline-block',fontSize:'12px'}); lineTags.appendChild(a); });
     card.appendChild(lineTags);
 
     const reactions=document.createElement('div'); reactions.className='reactions';
-    reactions.innerHTML=`
+    reactions.innerHTML=
       <button type="button" onclick="react(${z.id}, 'pray')">🙏 ${z.reactions.pray}</button>
       <button type="button" onclick="react(${z.id}, 'laugh')">😂 ${z.reactions.laugh}</button>
       <button type="button" onclick="react(${z.id}, 'sympathy')">🤝 ${z.reactions.sympathy}</button>
       <button type="button" onclick="react(${z.id}, 'growth')">🌱 ${z.reactions.growth}</button>
       <a href="detail.html?id=${z.id}" style="margin-left:8px;text-decoration:none;">💬 コメント(${Array.isArray(z.comments)?z.comments.length:0})</a>
-    `;
+    ;
     card.appendChild(reactions);
     finishReactionsRender(card, z);
 
@@ -1332,8 +1322,6 @@ async function registerUser(email, pass, { nickname = "" } = {}) {
         bio: ""
       });
     }
-    // ★通知バッジ即時更新
-    try{ updateNotifBadge(); }catch(_){}
     return true;
   }
   return false;
@@ -1361,9 +1349,7 @@ async function loginUser(email, pass) {
       });
     }
     // サーバー版 loginUser 内の return true の直前あたりに1行追加
-    ensureLocalAuthFromActiveOwner();
-    // ★通知バッジ即時更新
-    try{ updateNotifBadge(); }catch(_){}
+ensureLocalAuthFromActiveOwner();
     return true;
   }
   return false;
@@ -1373,8 +1359,6 @@ async function logoutUser() {
   await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
   // アクティブオーナーを解除（次回は旧互換の "profile" を参照）
   setActiveProfileOwner("");
-  // ★通知バッジ即時更新
-  try{ updateNotifBadge(); }catch(_){}
   return true;
 }
 
@@ -1392,7 +1376,7 @@ async function fetchMe() {
 /* ====== Per-user Profile namespace (fix for settings page) ====== */
 function _profileKeyFor(email){
   const e = (email || "").trim().toLowerCase();
-  return e ? `profile:${e}` : "profile";
+  return e ? profile:${e} : "profile";
 }
 function setActiveProfileOwner(email){
   localStorage.setItem("profile_owner", (email || "").trim().toLowerCase());
