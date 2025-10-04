@@ -34,6 +34,24 @@ app.get("/api/posts", async (req, res) => {
     res.json({ ok: true, posts: result.rows });
   } catch (err) {
     console.error(err);
+
+    const express = require("express");
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// ルートパス (/) にアクセスした時に返すレスポンス
+app.get("/", (req, res) => {
+  res.send("Zange API is running 🚀");
+});
+
+// 他のエンドポイント例
+app.get("/health", (req, res) => {
+  res.json({ status: "ok" });
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
     res.status(500).json({ ok: false, error: "Database fetch failed" });
   }
 });
