@@ -139,6 +139,13 @@ app.post('/admin/migrate', requireAdmin, async (_req, res) => {
       CREATE INDEX IF NOT EXISTS idx_rx_zange_type ON reactions(zange_id, type);
     `);
 
+    // user_id + zange_id + type の重複防止（1ユーザーが1種類につき1回だけ押せる）
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_rx_user_once
+        ON reactions (zange_id, user_id, type)
+        WHERE user_id IS NOT NULL;
+    `);
+    
     await client.query('COMMIT');
     res.json({ ok: true, applied: true });
   } catch (e) {
