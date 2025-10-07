@@ -1,4 +1,4 @@
-// ---- server.js (clean + lazy PG connect) ----
+// ---- server.js ----
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -8,83 +8,85 @@ app.use(cors());
 app.use(express.json());
 
 // ---- Config ----
-const PORT = process.env.PORT || 10000;                 // Render は 10000 で動きます
-const SECRET_KEY = process.env.SECRET_KEY || '';        // 管理操作用キー（RenderのEnvironmentに設定）
-const DATABASE_URL = process.env.DATABASE_URL;          // Neon の接続文字列（必須）
+const PORT = process.env.PORT || 10000;
+const ADMIN_KEY = process.env.SECRET_KEY || '';           // 管理操作用（migrate/dbcheck/seed）
+const DATABASE_URL = process.env.DATABASE_URL;
 
+// pg Pool（Render/Neon向けの安定オプション）
+const pool = new Pool({
+  connectionString: DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+  keepAlive: true,
+  max: 5,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 10_000,
+});
 
-// ====== ここがポイント：遅延でプール生成 ======
-let pool = null;
-/** 初回呼び出し時だけプール生成（起動時クラッシュを防ぐ） */
-function getPool() {
-  if (!pool) {
-    if (!DATABASE_URL) {
-      // 起動は通しつつ、アクセス時に分かるよう投げる
-      throw new Error('DATABASE_URL is not set');
-    }
-    pool = new Pool({
-      connectionString: DATABASE_URL,
-      ssl: { rejectUnauthorized: false }, // Neon は SSL 必須
-      keepAlive: true,
-      max: 5,
-      idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 10_000,
-    });
-    pool.on('error', (err) => {
-      console.error('[pg pool error]', err);
-    });
+// ---- ユーティリティ ----
+const toArray = (v) => {
+  if (Array.isArray(v)) return v.filter(Boolean);
+  if (typeof v === 'string') {
+    // カンマ／スペース／読点で区切る
+    return v
+      .split(/[,\s、]+/u)
+      .map(s => s.trim())
+      .filter(Boolean);
   }
-  return pool;
+  return [];
+};
+
+// users テーブルに email か nickname でユーザーを用意（なければ作る）
+async function ensureUser({ email, nickname, avatar_url }) {
+  // email があれば email 基準で upsert。なければ nickname で暫定作成（email NULL）
+  if (email) {
+    const q = `
+      INSERT INTO users(email, nickname, avatar_url)
+      VALUES($1, $2, $3)
+      ON CONFLICT (email)
+        DO UPDATE SET nickname = COALESCE(EXCLUDED.nickname, users.nickname),
+                      avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url)
+      RETURNING id
+    `;
+    const { rows } = await pool.query(q, [email, nickname || '匿名', avatar_url || null]);
+    return rows[0].id;
+  } else {
+    const q = `
+      INSERT INTO users(email, nickname, avatar_url)
+      VALUES(NULL, $1, $2)
+      RETURNING id
+    `;
+    const { rows } = await pool.query(q, [nickname || '匿名', avatar_url || null]);
+    return rows[0].id;
+  }
 }
 
-// ====== 公開エンドポイント ======
-app.get('/', (_req, res) => {
-  res.type('text/plain').send('Zange API is running 🚀');
-});
-
+// ---- ルート & ヘルス ----
+app.get('/', (_req, res) => res.send('Zange API is running 🚀'));
 app.get('/health', async (_req, res) => {
-  // ヘルスは DB 依存にしない（DBダウンでも200で生存を返し、詳細はdbフィールドで伝える）
-  const out = { status: 'ok', time: new Date().toISOString() };
   try {
-    const p = getPool();
-    await p.query('select 1');
-    out.db = 'ok';
+    await pool.query('select 1');
+    res.json({ status: 'ok', time: new Date().toISOString(), db: 'ok' });
   } catch (e) {
-    out.db = 'error';
-    out.db_message = String(e.message || e);
+    res.status(500).json({ status: 'db_error', message: e.message });
   }
-  res.json(out);
 });
 
-// ====== 管理用（SECRET_KEY で保護） ======
+// --- 管理保護ミドルウェア ---
 function requireAdmin(req, res, next) {
   const key = req.get('x-admin-key') || req.query.key;
-  if (!SECRET_KEY || key !== SECRET_KEY) {
-    return res.status(403).json({ error: 'forbidden' });
+  if (!ADMIN_KEY || key !== ADMIN_KEY) {
+    return res.status(401).json({ error: 'unauthorized' });
   }
   next();
 }
 
-/** DB疎通テスト（安全に原因切り分け用） */
-app.get('/admin/dbping', requireAdmin, async (_req, res) => {
-  try {
-    const p = getPool();
-    const r = await p.query('select version()');
-    res.json({ ok: true, version: r.rows?.[0]?.version || null });
-  } catch (e) {
-    console.error('[dbping] error:', e);
-    res.status(500).json({ ok: false, error: String(e.message || e) });
-  }
-});
-
-/** === マイグレーション（MVP用） === */
+/* ===================== マイグレーション系（既存） ===================== */
 app.post('/admin/migrate', requireAdmin, async (_req, res) => {
-  const p = getPool();
-  const client = await p.connect();
+  const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // users
+    // 1) users
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id          BIGSERIAL PRIMARY KEY,
@@ -96,42 +98,42 @@ app.post('/admin/migrate', requireAdmin, async (_req, res) => {
       CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
     `);
 
-    // zanges（投稿）
+    // 2) zanges（投稿）
     await client.query(`
       CREATE TABLE IF NOT EXISTS zanges (
         id          BIGSERIAL PRIMARY KEY,
         owner_id    BIGINT REFERENCES users(id) ON DELETE SET NULL,
         text        TEXT NOT NULL,
-        targets     TEXT[],                     -- ["上司","母"] など
-        future_tag  TEXT,                       -- "#集中します"
+        targets     TEXT[],                         -- ["上司","母"] 等
+        future_tag  TEXT,                           -- "#集中します"
         scope       TEXT NOT NULL DEFAULT 'public', -- 'public' or 'private'
-        bg          TEXT,                       -- 背景画像ファイル名
+        bg          TEXT,                           -- 背景画像ファイル名
         created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
       );
       CREATE INDEX IF NOT EXISTS idx_zanges_created_at ON zanges(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_zanges_scope ON zanges(scope);
     `);
 
-    // comments
+    // 3) comments
     await client.query(`
       CREATE TABLE IF NOT EXISTS comments (
         id          BIGSERIAL PRIMARY KEY,
         zange_id    BIGINT NOT NULL REFERENCES zanges(id) ON DELETE CASCADE,
         user_id     BIGINT REFERENCES users(id) ON DELETE SET NULL,
-        name        TEXT,                       -- 匿名名保存用
+        name        TEXT,                      -- 匿名名保存用
         text        TEXT NOT NULL,
         created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
       );
       CREATE INDEX IF NOT EXISTS idx_comments_zange_id ON comments(zange_id);
     `);
 
-    // reactions（組み込み & カスタム）
+    // 4) reactions（組み込み & カスタム）
     await client.query(`
       CREATE TABLE IF NOT EXISTS reactions (
         id          BIGSERIAL PRIMARY KEY,
         zange_id    BIGINT NOT NULL REFERENCES zanges(id) ON DELETE CASCADE,
         user_id     BIGINT REFERENCES users(id) ON DELETE SET NULL,
-        type        TEXT NOT NULL,              -- 'pray','laugh','sympathy','growth' など
+        type        TEXT NOT NULL,             -- 'pray' 'laugh' 'sympathy' 'growth' など
         created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
       );
       CREATE INDEX IF NOT EXISTS idx_rx_zange_type ON reactions(zange_id, type);
@@ -141,47 +143,45 @@ app.post('/admin/migrate', requireAdmin, async (_req, res) => {
     res.json({ ok: true, applied: true });
   } catch (e) {
     await client.query('ROLLBACK');
-    console.error('[migrate] error:', e);
-    res.status(500).json({ ok: false, error: String(e.message || e) });
+    console.error('[migrate] error', e);
+    res.status(500).json({ ok: false, error: e.message });
   } finally {
     client.release();
   }
 });
 
-/** ざっくり件数確認 */
-app.get('/admin/dbcheck', requireAdmin, async (_req, res) => {
+app.get('/admin/dbping', requireAdmin, async (_req, res) => {
   try {
-    const p = getPool();
-    const { rows } = await p.query(`
-      SELECT
-        (SELECT count(*) FROM users)      ::int AS users,
-        (SELECT count(*) FROM zanges)     ::int AS zanges,
-        (SELECT count(*) FROM comments)   ::int AS comments,
-        (SELECT count(*) FROM reactions)  ::int AS reactions
-    `);
-    res.json({ ok: true, ...rows[0] });
+    await pool.query('select 1');
+    res.json({ ok: true, ping: 'ok' });
   } catch (e) {
-    res.status(500).json({ ok: false, error: String(e.message || e) });
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
-/** デモ用データ投入（任意） */
+app.get('/admin/dbcheck', requireAdmin, async (_req, res) => {
+  const { rows } = await pool.query(`
+    SELECT
+      (SELECT count(*) FROM users)      ::int as users,
+      (SELECT count(*) FROM zanges)     ::int as zanges,
+      (SELECT count(*) FROM comments)   ::int as comments,
+      (SELECT count(*) FROM reactions)  ::int as reactions
+  `);
+  res.json({ ok: true, ...rows[0] });
+});
+
 app.post('/admin/seed', requireAdmin, async (_req, res) => {
-  const p = getPool();
-  const c = await p.connect();
+  const c = await pool.connect();
   try {
     await c.query('BEGIN');
-
     const u = await c.query(
       `INSERT INTO users(email, nickname, avatar_url)
        VALUES($1,$2,$3)
-       ON CONFLICT (email) DO UPDATE
-         SET nickname = EXCLUDED.nickname
+       ON CONFLICT (email) DO UPDATE SET nickname=EXCLUDED.nickname
        RETURNING id`,
       ['demo@zange.local', 'zange開発者', 'images/default-avatar.png']
     );
     const ownerId = u.rows[0].id;
-
     const z = await c.query(
       `INSERT INTO zanges(owner_id, text, targets, future_tag, scope, bg)
        VALUES($1,$2,$3,$4,$5,$6)
@@ -195,18 +195,152 @@ app.post('/admin/seed', requireAdmin, async (_req, res) => {
         null
       ]
     );
-
     await c.query('COMMIT');
     res.json({ ok: true, user_id: ownerId, zange_id: z.rows[0].id });
   } catch (e) {
     await c.query('ROLLBACK');
-    res.status(500).json({ ok: false, error: String(e.message || e) });
+    res.status(500).json({ ok: false, error: e.message });
   } finally {
     c.release();
   }
 });
 
-// 404 明示（デバッグしやすく）
+/* ===================== ★ ここからアプリAPI（追加） ===================== */
+
+/**
+ * POST /zanges
+ * 本文・対象・タグ・公開範囲などを受け取り、DBへ保存。
+ * 認証は未実装のため、email or nickname で暫定オーナーを確保する。
+ *
+ * body 例:
+ * {
+ *   "text": "会議中にSlackばっか見てました📱",
+ *   "targets": ["上司","同僚"],              // 文字列でもOK
+ *   "futureTag": "#集中します",
+ *   "scope": "public",                       // "public"|"private"
+ *   "bg": "bg01.jpg",
+ *   "ownerEmail": "foo@example.com",         // 任意
+ *   "ownerNickname": "匿名A",                // 任意
+ *   "avatarUrl": "images/default-avatar.png" // 任意
+ * }
+ */
+app.post('/zanges', async (req, res) => {
+  try {
+    const {
+      text,
+      targets,
+      futureTag,
+      scope,
+      bg,
+      ownerEmail,
+      ownerNickname,
+      avatarUrl
+    } = req.body || {};
+
+    // バリデーション（MVPは最小限）
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      return res.status(400).json({ ok: false, error: 'text is required' });
+    }
+    if (text.length > 325) {
+      return res.status(400).json({ ok: false, error: 'text must be <= 325 chars' });
+    }
+    const targetsArr = toArray(targets);
+    const scopeVal = (scope === 'private') ? 'private' : 'public';
+    const futureTagVal = typeof futureTag === 'string' ? futureTag.trim() : null;
+    const bgVal = typeof bg === 'string' && bg.trim() ? bg.trim() : null;
+
+    // 暫定ユーザー確保（email優先、無ければnickname）
+    const owner_id = await ensureUser({
+      email: ownerEmail || null,
+      nickname: ownerNickname || '匿名',
+      avatar_url: avatarUrl || null
+    });
+
+    const q = `
+      INSERT INTO zanges(owner_id, text, targets, future_tag, scope, bg)
+      VALUES($1,$2,$3,$4,$5,$6)
+      RETURNING id, created_at
+    `;
+    const { rows } = await pool.query(q, [
+      owner_id,
+      text.trim(),
+      targetsArr.length ? targetsArr : null,
+      futureTagVal,
+      scopeVal,
+      bgVal
+    ]);
+
+    res.status(201).json({
+      ok: true,
+      id: rows[0].id,
+      created_at: rows[0].created_at,
+      owner_id
+    });
+  } catch (e) {
+    console.error('[POST /zanges] error', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/**
+ * GET /feed
+ * 公開投稿の新着を返す。コメント数・リアクション数もまとめて返す。
+ * クエリ: ?limit=20
+ */
+app.get('/feed', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
+
+    const q = `
+      SELECT
+        z.id,
+        z.text,
+        z.targets,
+        z.future_tag,
+        z.scope,
+        z.bg,
+        z.created_at,
+        u.id          AS owner_id,
+        u.nickname    AS owner_nickname,
+        u.avatar_url  AS owner_avatar,
+        -- コメント数
+        COALESCE(c.cnt, 0) AS comments_count,
+        -- リアクション種別ごとの件数（簡易にSUM）
+        COALESCE(r.pray, 0)      AS rx_pray,
+        COALESCE(r.laugh, 0)     AS rx_laugh,
+        COALESCE(r.sympathy, 0)  AS rx_sympathy,
+        COALESCE(r.growth, 0)    AS rx_growth
+      FROM zanges z
+      LEFT JOIN users u ON u.id = z.owner_id
+      LEFT JOIN (
+        SELECT zange_id, COUNT(*)::int AS cnt
+        FROM comments
+        GROUP BY zange_id
+      ) c ON c.zange_id = z.id
+      LEFT JOIN (
+        SELECT
+          zange_id,
+          COUNT(*) FILTER (WHERE type='pray')::int     AS pray,
+          COUNT(*) FILTER (WHERE type='laugh')::int    AS laugh,
+          COUNT(*) FILTER (WHERE type='sympathy')::int AS sympathy,
+          COUNT(*) FILTER (WHERE type='growth')::int   AS growth
+        FROM reactions
+        GROUP BY zange_id
+      ) r ON r.zange_id = z.id
+      WHERE z.scope = 'public'
+      ORDER BY z.created_at DESC
+      LIMIT $1
+    `;
+    const { rows } = await pool.query(q, [limit]);
+
+    res.json({ ok: true, items: rows });
+  } catch (e) {
+    console.error('[GET /feed] error', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/* ===================== 最後に404 & 起動 ===================== */
 app.use((req, res) => {
   res.status(404).type('text/plain').send('Not found (custom 404)');
 });
