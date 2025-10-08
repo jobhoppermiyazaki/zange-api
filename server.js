@@ -1,4 +1,5 @@
 // ---- server.js ----
+// ---- server.js ----
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -9,7 +10,8 @@ app.use(express.json());
 
 // ---- Config ----
 const PORT = process.env.PORT || 10000;
-const ADMIN_KEY = process.env.SECRET_KEY || '';           // 管理操作用（migrate/dbcheck/seed）
+// SECRET_KEY か ADMIN_KEY のどちらでも設定可能。空白は無視。
+const ADMIN_KEY = (process.env.SECRET_KEY || process.env.ADMIN_KEY || '').trim();
 const DATABASE_URL = process.env.DATABASE_URL;
 
 // pg Pool（Render/Neon向けの安定オプション）
@@ -37,7 +39,6 @@ const toArray = (v) => {
 
 // users テーブルに email か nickname でユーザーを用意（なければ作る）
 async function ensureUser({ email, nickname, avatar_url }) {
-  // email があれば email 基準で upsert。なければ nickname で暫定作成（email NULL）
   if (email) {
     const q = `
       INSERT INTO users(email, nickname, avatar_url)
@@ -73,15 +74,28 @@ app.get('/health', async (_req, res) => {
 
 // --- 管理保護ミドルウェア ---
 function requireAdmin(req, res, next) {
-  const key = req.get('x-admin-key') || req.query.key;
-  if (!ADMIN_KEY || key !== ADMIN_KEY) {
+  // キー取得（ヘッダ or クエリ）
+  const key =
+    (req.get('x-admin-key') || req.get('X-Admin-Key') || req.query.key || req.query.admin_key || '').trim();
+
+  // サーバ側キー未設定は分かりやすく 500
+  if (!ADMIN_KEY) {
+    return res.status(500).json({
+      error: 'admin_key_not_configured',
+      message: 'SECRET_KEY (or ADMIN_KEY) is not set on the server.'
+    });
+  }
+  // 不一致は 401
+  if (key !== ADMIN_KEY) {
     return res.status(401).json({ error: 'unauthorized' });
   }
   next();
 }
 
-/* ===================== マイグレーション系（既存） ===================== */
-app.post('/admin/migrate', requireAdmin, async (_req, res) => {
+/* ===================== マイグレーション系 ===================== */
+
+// 共通のマイグレーション処理
+async function runMigrate(res) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -139,13 +153,13 @@ app.post('/admin/migrate', requireAdmin, async (_req, res) => {
       CREATE INDEX IF NOT EXISTS idx_rx_zange_type ON reactions(zange_id, type);
     `);
 
-    // user_id + zange_id + type の重複防止（1ユーザーが1種類につき1回だけ押せる）
+    // 4a) 1ユーザー1種類につき1回制約（user_id がある場合のみ）
     await client.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS uq_rx_user_once
         ON reactions (zange_id, user_id, type)
         WHERE user_id IS NOT NULL;
     `);
-    
+
     await client.query('COMMIT');
     res.json({ ok: true, applied: true });
   } catch (e) {
@@ -155,6 +169,16 @@ app.post('/admin/migrate', requireAdmin, async (_req, res) => {
   } finally {
     client.release();
   }
+}
+
+// POST /admin/migrate（正式ルート）
+app.post('/admin/migrate', requireAdmin, async (_req, res) => {
+  await runMigrate(res);
+});
+
+// GET /admin/migrate（利便性のため GET でも許可：同じ処理）
+app.get('/admin/migrate', requireAdmin, async (_req, res) => {
+  await runMigrate(res);
 });
 
 app.get('/admin/dbping', requireAdmin, async (_req, res) => {
@@ -212,24 +236,10 @@ app.post('/admin/seed', requireAdmin, async (_req, res) => {
   }
 });
 
-/* ===================== ★ ここからアプリAPI（追加） ===================== */
+/* ===================== アプリAPI ===================== */
 
 /**
  * POST /zanges
- * 本文・対象・タグ・公開範囲などを受け取り、DBへ保存。
- * 認証は未実装のため、email or nickname で暫定オーナーを確保する。
- *
- * body 例:
- * {
- *   "text": "会議中にSlackばっか見てました📱",
- *   "targets": ["上司","同僚"],              // 文字列でもOK
- *   "futureTag": "#集中します",
- *   "scope": "public",                       // "public"|"private"
- *   "bg": "bg01.jpg",
- *   "ownerEmail": "foo@example.com",         // 任意
- *   "ownerNickname": "匿名A",                // 任意
- *   "avatarUrl": "images/default-avatar.png" // 任意
- * }
  */
 app.post('/zanges', async (req, res) => {
   try {
@@ -244,7 +254,6 @@ app.post('/zanges', async (req, res) => {
       avatarUrl
     } = req.body || {};
 
-    // バリデーション（MVPは最小限）
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return res.status(400).json({ ok: false, error: 'text is required' });
     }
@@ -256,7 +265,6 @@ app.post('/zanges', async (req, res) => {
     const futureTagVal = typeof futureTag === 'string' ? futureTag.trim() : null;
     const bgVal = typeof bg === 'string' && bg.trim() ? bg.trim() : null;
 
-    // 暫定ユーザー確保（email優先、無ければnickname）
     const owner_id = await ensureUser({
       email: ownerEmail || null,
       nickname: ownerNickname || '匿名',
@@ -291,8 +299,6 @@ app.post('/zanges', async (req, res) => {
 
 /**
  * GET /feed
- * 公開投稿の新着を返す。コメント数・リアクション数もまとめて返す。
- * クエリ: ?limit=20
  */
 app.get('/feed', async (req, res) => {
   try {
@@ -310,9 +316,7 @@ app.get('/feed', async (req, res) => {
         u.id          AS owner_id,
         u.nickname    AS owner_nickname,
         u.avatar_url  AS owner_avatar,
-        -- コメント数
         COALESCE(c.cnt, 0) AS comments_count,
-        -- リアクション種別ごとの件数（簡易にSUM）
         COALESCE(r.pray, 0)      AS rx_pray,
         COALESCE(r.laugh, 0)     AS rx_laugh,
         COALESCE(r.sympathy, 0)  AS rx_sympathy,
