@@ -1,5 +1,4 @@
 // ---- server.js ----
-// ---- server.js ----
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -10,8 +9,7 @@ app.use(express.json());
 
 // ---- Config ----
 const PORT = process.env.PORT || 10000;
-// SECRET_KEY か ADMIN_KEY のどちらでも設定可能。空白は無視。
-const ADMIN_KEY = (process.env.SECRET_KEY || process.env.ADMIN_KEY || '').trim();
+const ADMIN_KEY = process.env.SECRET_KEY || '';           // 管理操作用（migrate/dbcheck/seed）
 const DATABASE_URL = process.env.DATABASE_URL;
 
 // pg Pool（Render/Neon向けの安定オプション）
@@ -36,6 +34,26 @@ const toArray = (v) => {
   }
   return [];
 };
+
+const KNOWN_REACTION_TYPES = new Set(['pray', 'laugh', 'sympathy', 'growth']);
+
+// reactions のサマリーを取得
+async function getReactionSummary(zangeId) {
+  const { rows } = await pool.query(
+    `
+    SELECT
+      COUNT(*) FILTER (WHERE type='pray')::int     AS pray,
+      COUNT(*) FILTER (WHERE type='laugh')::int    AS laugh,
+      COUNT(*) FILTER (WHERE type='sympathy')::int AS sympathy,
+      COUNT(*) FILTER (WHERE type='growth')::int   AS growth,
+      COUNT(*) FILTER (WHERE type NOT IN ('pray','laugh','sympathy','growth'))::int AS other
+    FROM reactions
+    WHERE zange_id = $1
+    `,
+    [zangeId]
+  );
+  return rows[0] || { pray: 0, laugh: 0, sympathy: 0, growth: 0, other: 0 };
+}
 
 // users テーブルに email か nickname でユーザーを用意（なければ作る）
 async function ensureUser({ email, nickname, avatar_url }) {
@@ -74,28 +92,15 @@ app.get('/health', async (_req, res) => {
 
 // --- 管理保護ミドルウェア ---
 function requireAdmin(req, res, next) {
-  // キー取得（ヘッダ or クエリ）
-  const key =
-    (req.get('x-admin-key') || req.get('X-Admin-Key') || req.query.key || req.query.admin_key || '').trim();
-
-  // サーバ側キー未設定は分かりやすく 500
-  if (!ADMIN_KEY) {
-    return res.status(500).json({
-      error: 'admin_key_not_configured',
-      message: 'SECRET_KEY (or ADMIN_KEY) is not set on the server.'
-    });
-  }
-  // 不一致は 401
-  if (key !== ADMIN_KEY) {
+  const key = req.get('x-admin-key') || req.query.key;
+  if (!ADMIN_KEY || key !== ADMIN_KEY) {
     return res.status(401).json({ error: 'unauthorized' });
   }
   next();
 }
 
 /* ===================== マイグレーション系 ===================== */
-
-// 共通のマイグレーション処理
-async function runMigrate(res) {
+app.post('/admin/migrate', requireAdmin, async (_req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -153,7 +158,7 @@ async function runMigrate(res) {
       CREATE INDEX IF NOT EXISTS idx_rx_zange_type ON reactions(zange_id, type);
     `);
 
-    // 4a) 1ユーザー1種類につき1回制約（user_id がある場合のみ）
+    // user_id + zange_id + type は 1回だけ（匿名は user_id=NULL のため対象外）
     await client.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS uq_rx_user_once
         ON reactions (zange_id, user_id, type)
@@ -169,22 +174,12 @@ async function runMigrate(res) {
   } finally {
     client.release();
   }
-}
-
-// POST /admin/migrate（正式ルート）
-app.post('/admin/migrate', requireAdmin, async (_req, res) => {
-  await runMigrate(res);
-});
-
-// GET /admin/migrate（利便性のため GET でも許可：同じ処理）
-app.get('/admin/migrate', requireAdmin, async (_req, res) => {
-  await runMigrate(res);
 });
 
 app.get('/admin/dbping', requireAdmin, async (_req, res) => {
   try {
-    await pool.query('select 1');
-    res.json({ ok: true, ping: 'ok' });
+    const { rows } = await pool.query(`select version()`);
+    res.json({ ok: true, version: rows[0].version });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
@@ -236,10 +231,11 @@ app.post('/admin/seed', requireAdmin, async (_req, res) => {
   }
 });
 
-/* ===================== アプリAPI ===================== */
+/* ===================== 投稿API ===================== */
 
 /**
  * POST /zanges
+ * 本文・対象・タグ・公開範囲などを受け取り、DBへ保存。
  */
 app.post('/zanges', async (req, res) => {
   try {
@@ -299,6 +295,8 @@ app.post('/zanges', async (req, res) => {
 
 /**
  * GET /feed
+ * 公開投稿の新着を返す。コメント数・リアクション数もまとめて返す。
+ * クエリ: ?limit=20
  */
 app.get('/feed', async (req, res) => {
   try {
@@ -316,7 +314,9 @@ app.get('/feed', async (req, res) => {
         u.id          AS owner_id,
         u.nickname    AS owner_nickname,
         u.avatar_url  AS owner_avatar,
+        -- コメント数
         COALESCE(c.cnt, 0) AS comments_count,
+        -- リアクション種別ごとの件数
         COALESCE(r.pray, 0)      AS rx_pray,
         COALESCE(r.laugh, 0)     AS rx_laugh,
         COALESCE(r.sympathy, 0)  AS rx_sympathy,
@@ -347,6 +347,127 @@ app.get('/feed', async (req, res) => {
     res.json({ ok: true, items: rows });
   } catch (e) {
     console.error('[GET /feed] error', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/* ===================== リアクションAPI 🙏 ===================== */
+/**
+ * POST /reactions
+ * 追加/削除/トグルでリアクションを付ける。
+ * body:
+ * {
+ *   "zangeId": 123,                 // 必須
+ *   "type": "pray" | "laugh" | ...  // 必須（任意文字列OKだが長すぎはNG）
+ *   "action": "toggle" | "add" | "remove" (既定: "toggle")
+ *   "userEmail": "...",             // 任意（あると重複防止が効く）
+ *   "userNickname": "...",          // 任意
+ *   "avatarUrl": "..."              // 任意
+ * }
+ *
+ * 返り値:
+ * {
+ *   ok: true,
+ *   summary: { pray, laugh, sympathy, growth, other },
+ *   my: { reacted: boolean }
+ * }
+ */
+app.post('/reactions', async (req, res) => {
+  const { zangeId, type, action = 'toggle', userEmail, userNickname, avatarUrl } = req.body || {};
+  try {
+    // バリデーション
+    const zid = parseInt(zangeId, 10);
+    if (!zid || zid <= 0) return res.status(400).json({ ok: false, error: 'zangeId is required' });
+
+    let rxType = (typeof type === 'string' ? type.trim() : '');
+    if (!rxType) return res.status(400).json({ ok: false, error: 'type is required' });
+    if (rxType.length > 20) return res.status(400).json({ ok: false, error: 'type too long' });
+
+    // zange の存在チェック（なければ 404）
+    const { rowCount: zExists } = await pool.query(`SELECT 1 FROM zanges WHERE id=$1`, [zid]);
+    if (!zExists) return res.status(404).json({ ok: false, error: 'zange not found' });
+
+    // ユーザーが特定できる場合は upsert / 削除で重複防止を効かせる
+    let userId = null;
+    if (userEmail || userNickname) {
+      userId = await ensureUser({
+        email: userEmail || null,
+        nickname: userNickname || '匿名',
+        avatar_url: avatarUrl || null
+      });
+    }
+
+    if (action === 'remove') {
+      if (!userId) {
+        // 匿名は誰のリアクションか特定できないため remove は不可
+        const summary = await getReactionSummary(zid);
+        return res.status(400).json({ ok: false, error: 'remove requires identified user', summary, my: { reacted: false } });
+      }
+      await pool.query(`DELETE FROM reactions WHERE zange_id=$1 AND user_id=$2 AND type=$3`, [zid, userId, rxType]);
+      const summary = await getReactionSummary(zid);
+      return res.json({ ok: true, summary, my: { reacted: false } });
+    }
+
+    if (action === 'toggle' && userId) {
+      // 既に押していれば消す、無ければ入れる
+      const { rowCount: existed } = await pool.query(
+        `DELETE FROM reactions WHERE zange_id=$1 AND user_id=$2 AND type=$3`,
+        [zid, userId, rxType]
+      );
+      if (existed === 0) {
+        await pool.query(
+          `INSERT INTO reactions(zange_id, user_id, type) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
+          [zid, userId, rxType]
+        );
+        const summary = await getReactionSummary(zid);
+        return res.json({ ok: true, summary, my: { reacted: true } });
+      } else {
+        const summary = await getReactionSummary(zid);
+        return res.json({ ok: true, summary, my: { reacted: false } });
+      }
+    }
+
+    // action: 'add' or toggle(匿名)
+    if (userId) {
+      await pool.query(
+        `INSERT INTO reactions(zange_id, user_id, type) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
+        [zid, userId, rxType]
+      );
+      const summary = await getReactionSummary(zid);
+      // 自分は必ず 1件ある前提（コンフリクト＝既にあったときも reacted:true として返す）
+      const { rowCount: mine } = await pool.query(
+        `SELECT 1 FROM reactions WHERE zange_id=$1 AND user_id=$2 AND type=$3`,
+        [zid, userId, rxType]
+      );
+      return res.json({ ok: true, summary, my: { reacted: mine > 0 } });
+    } else {
+      // 匿名は記録のみ（重複防止なし）
+      await pool.query(
+        `INSERT INTO reactions(zange_id, user_id, type) VALUES($1,NULL,$2)`,
+        [zid, rxType]
+      );
+      const summary = await getReactionSummary(zid);
+      return res.json({ ok: true, summary, my: { reacted: true } });
+    }
+  } catch (e) {
+    console.error('[POST /reactions] error', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/**
+ * GET /zanges/:id/reactions
+ * 指定 zange のリアクション集計のみ返す。
+ */
+app.get('/zanges/:id/reactions', async (req, res) => {
+  try {
+    const zid = parseInt(req.params.id, 10);
+    if (!zid) return res.status(400).json({ ok: false, error: 'invalid id' });
+
+    const summary = await getReactionSummary(zid);
+    res.json({ ok: true, summary });
+  } catch (e) {
+    console.error('[GET /zanges/:id/reactions] error', e);
     res.status(500).json({ ok: false, error: e.message });
   }
 });
