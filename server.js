@@ -472,6 +472,186 @@ app.get('/zanges/:id/reactions', async (req, res) => {
   }
 });
 
+/* ===================== コメントAPI（追加） ===================== */
+/**
+ * POST /zanges/:id/comments
+ * コメントを1件作成（匿名名 or ユーザー特定どちらでもOK）
+ *
+ * body 例:
+ * {
+ *   "text": "それ、あるあるです…！",
+ *   "name": "匿名B",                 // 任意：画面に出す表示名（未指定ならユーザーのnickname or "匿名"）
+ *   "email": "foo@example.com",      // 任意：ユーザー特定に使う（あれば ensureUser で upsert）
+ *   "nickname": "太郎",              // 任意：email 無い時の暫定作成に使用
+ *   "avatarUrl": "images/a.png"      // 任意
+ * }
+ */
+app.post('/zanges/:id/comments', async (req, res) => {
+  const zangeId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(zangeId) || zangeId <= 0) {
+    return res.status(400).json({ ok: false, error: 'invalid zange id' });
+  }
+
+  try {
+    const { text, name, email, nickname, avatarUrl } = req.body || {};
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      return res.status(400).json({ ok: false, error: 'text is required' });
+    }
+    if (text.length > 500) {
+      return res.status(400).json({ ok: false, error: 'text must be <= 500 chars' });
+    }
+
+    // 該当の zange が存在するか軽くチェック（無ければ 404）
+    const z = await pool.query('SELECT id FROM zanges WHERE id=$1', [zangeId]);
+    if (z.rowCount === 0) {
+      return res.status(404).json({ ok: false, error: 'zange not found' });
+    }
+
+    // コメント主のユーザー（任意）
+    let userId = null;
+    if (email || nickname) {
+      userId = await ensureUser({
+        email: email || null,
+        nickname: nickname || '匿名',
+        avatar_url: avatarUrl || null
+      });
+    }
+
+    const displayName =
+      (typeof name === 'string' && name.trim()) ||
+      (nickname && nickname.trim()) ||
+      '匿名';
+
+    const q = `
+      INSERT INTO comments (zange_id, user_id, name, text)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, zange_id, user_id, name, text, created_at
+    `;
+    const { rows } = await pool.query(q, [
+      zangeId,
+      userId,
+      displayName.trim(),
+      text.trim()
+    ]);
+    res.status(201).json({ ok: true, item: rows[0] });
+  } catch (e) {
+    console.error('[POST /zanges/:id/comments] error', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/**
+ * GET /zanges/:id/comments
+ * コメント一覧を新着順で取得。シンプルなカーソル方式。
+ * クエリ:
+ *   ?limit=20             // 1〜100（デフォ20）
+ *   ?beforeId=123         // これより小さいIDだけ返す（次ページを取るときに使う）
+ *
+ * レスポンス:
+ * { ok:true, items:[...], nextCursor: { beforeId: <number> } | null }
+ */
+app.get('/zanges/:id/comments', async (req, res) => {
+  const zangeId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(zangeId) || zangeId <= 0) {
+    return res.status(400).json({ ok: false, error: 'invalid zange id' });
+  }
+
+  try {
+    const limit = Math.min(Math.max(parseInt(req.query.limit || '20', 10), 1), 100);
+    const beforeId = req.query.beforeId ? parseInt(req.query.beforeId, 10) : null;
+
+    const params = [zangeId];
+    let where = 'WHERE c.zange_id=$1';
+    if (Number.isInteger(beforeId) && beforeId > 0) {
+      params.push(beforeId);
+      where += ` AND c.id < $${params.length}`;
+    }
+    params.push(limit + 1); // 1件多めに取って nextCursor 判定
+    const limitIdx = params.length;
+
+    const q = `
+      SELECT
+        c.id, c.zange_id, c.user_id, c.name, c.text, c.created_at,
+        u.nickname AS user_nickname,
+        u.avatar_url AS user_avatar
+      FROM comments c
+      LEFT JOIN users u ON u.id = c.user_id
+      ${where}
+      ORDER BY c.id DESC
+      LIMIT $${limitIdx}
+    `;
+    const { rows } = await pool.query(q, params);
+
+    let nextCursor = null;
+    if (rows.length > limit) {
+      const nextBeforeId = rows[limit].id;
+      rows.length = limit;
+      nextCursor = { beforeId: nextBeforeId };
+    }
+
+    res.json({ ok: true, items: rows, nextCursor });
+  } catch (e) {
+    console.error('[GET /zanges/:id/comments] error', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+/**
+ * DELETE /zanges/:id/comments/:commentId
+ * コメントを削除。
+ * ルール:
+ *  - 管理者（SECRET_KEY 提供）なら無条件で削除可
+ *  - それ以外は、email/nickname で本人を特定し、かつ本人のコメントのみ削除可
+ *
+ * クエリ/ヘッダー:
+ *  - x-admin-key or ?key=...  （管理者用）
+ *  - もしくは body/query に email/nickname を指定して本人確認
+ */
+app.delete('/zanges/:id/comments/:commentId', async (req, res) => {
+  const zangeId = parseInt(req.params.id, 10);
+  const commentId = parseInt(req.params.commentId, 10);
+  if (!Number.isInteger(zangeId) || !Number.isInteger(commentId)) {
+    return res.status(400).json({ ok: false, error: 'invalid id' });
+  }
+
+  const adminKey = req.get('x-admin-key') || req.query.key;
+
+  try {
+    // 管理者は無条件で削除
+    if (ADMIN_KEY && adminKey === ADMIN_KEY) {
+      const r = await pool.query('DELETE FROM comments WHERE id=$1 AND zange_id=$2', [
+        commentId,
+        zangeId
+      ]);
+      return res.json({ ok: true, deleted: r.rowCount });
+    }
+
+    // 一般ユーザー：email/nickname で本人を特定
+    const { email, nickname } = { ...req.body, ...req.query };
+    if (!email && !nickname) {
+      return res.status(401).json({ ok: false, error: 'unauthorized (need email or nickname or admin key)' });
+    }
+
+    const userId = await ensureUser({
+      email: email || null,
+      nickname: nickname || '匿名',
+      avatar_url: null
+    });
+
+    const r = await pool.query(
+      'DELETE FROM comments WHERE id=$1 AND zange_id=$2 AND user_id=$3',
+      [commentId, zangeId, userId]
+    );
+    if (r.rowCount === 0) {
+      return res.status(403).json({ ok: false, error: 'forbidden (not your comment or not found)' });
+    }
+    res.json({ ok: true, deleted: r.rowCount });
+  } catch (e) {
+    console.error('[DELETE /zanges/:id/comments/:commentId] error', e);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 /* ===================== 最後に404 & 起動 ===================== */
 app.use((req, res) => {
   res.status(404).type('text/plain').send('Not found (custom 404)');
