@@ -1396,3 +1396,190 @@ function mountOwnerHead(card, z) {
   head.classList.add('z-owner-head');
   card.insertBefore(head, card.firstChild);
 }
+/* ========= Zange API bridge UI (safe-append) ========= */
+(() => {
+  const BASE_URL = 'https://zange-web.onrender.com'; // ←必要なら変更
+
+  // ローカルにユーザー識別を保存（メール & ニックネーム）
+  const idState = {
+    email: localStorage.getItem('zange_email') || '',
+    nickname: localStorage.getItem('zange_nickname') || ''
+  };
+
+  // 使い回し用：HTMLエスケープ（ローカル関数名なので既存と衝突しません）
+  const esc = (s='') => s
+    .replaceAll('&','&amp;').replaceAll('<','&lt;')
+    .replaceAll('>','&gt;').replaceAll('"','&quot;')
+    .replaceAll("'",'&#39;');
+
+  // ---- API helpers ----
+  async function get(path){ const r=await fetch(BASE_URL+path); if(!r.ok) throw new Error(await r.text()); return r.json(); }
+  async function post(path, body){ const r=await fetch(BASE_URL+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}); if(!r.ok) throw new Error(await r.text()); return r.json(); }
+  async function del(path){ const r=await fetch(BASE_URL+path,{method:'DELETE'}); if(!r.ok) throw new Error(await r.text()); return r.json(); }
+
+  // ---- 入口（#feed があれば自動で動く）----
+  document.addEventListener('DOMContentLoaded', () => {
+    const email = document.getElementById('userEmail');
+    const nick  = document.getElementById('userNickname');
+    const save  = document.getElementById('saveIdentity');
+    if (email) email.value = idState.email;
+    if (nick)  nick.value  = idState.nickname;
+    if (save) {
+      save.addEventListener('click', () => {
+        idState.email    = (email?.value || '').trim();
+        idState.nickname = (nick?.value  || '').trim();
+        localStorage.setItem('zange_email', idState.email);
+        localStorage.setItem('zange_nickname', idState.nickname);
+        alert('保存しました');
+        loadFeed();
+      });
+    }
+    if (document.getElementById('feed')) loadFeed();
+  });
+
+  // ---- フィード ----
+  async function loadFeed(){
+    const box = document.getElementById('feed');
+    if (!box) return;
+    box.innerHTML = '読み込み中…';
+    try{
+      const data = await get('/feed?limit=20');
+      const items = data.items || [];
+      if (!items.length){ box.innerHTML = '<p>まだ投稿がありません。</p>'; return; }
+      box.innerHTML = items.map(renderCard).join('');
+      bindCardEvents();
+    }catch(e){
+      box.innerHTML = `<p style="color:#c00;">読み込み失敗: ${esc(e.message||'error')}</p>`;
+    }
+  }
+
+  function renderCard(it){
+    const t = new Date(it.created_at).toLocaleString();
+    const targets = (it.targets && it.targets.length) ? `対象: ${it.targets.join(' / ')}` : '';
+    const nickname = it.owner_nickname || '匿名';
+    const avatar = it.owner_avatar ? `<img src="${it.owner_avatar}" alt="" style="width:24px;height:24px;border-radius:50%;">` : '👤';
+    return `
+      <article class="card api-card" data-id="${it.id}" style="border:1px solid #eee;border-radius:12px;padding:12px;margin:12px 0;">
+        <header style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+          <span>${avatar}</span><strong>${esc(nickname)}</strong>
+          <span style="margin-left:auto;color:#888;font-size:12px;">${t}</span>
+        </header>
+        <p style="white-space:pre-wrap;line-height:1.6;margin:8px 0;">${esc(it.text)}</p>
+        <div style="color:#666;font-size:12px;">${targets} ${it.future_tag?`／ ${esc(it.future_tag)}`:''}</div>
+
+        <div class="rx-row" style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
+          <button class="rx" data-type="pray">🙏 <b>${it.rx_pray||0}</b></button>
+          <button class="rx" data-type="laugh">😂 <b>${it.rx_laugh||0}</b></button>
+          <button class="rx" data-type="sympathy">🤝 <b>${it.rx_sympathy||0}</b></button>
+          <button class="rx" data-type="growth">🌱 <b>${it.rx_growth||0}</b></button>
+          <button class="show-comments" style="margin-left:auto;">💬 コメント(<b>${it.comments_count||0}</b>) を表示</button>
+        </div>
+
+        <div class="comments" style="display:none;margin-top:8px;border-top:1px dashed #ddd;padding-top:8px;">
+          <div class="list" data-loaded="0">読み込み中…</div>
+          <form class="cform" style="display:flex;gap:6px;margin-top:8px;">
+            <input name="text" placeholder="コメントを書く…" style="flex:1;padding:8px;">
+            <button type="submit">送信</button>
+          </form>
+        </div>
+      </article>`;
+  }
+
+  function bindCardEvents(){
+    // リアクション（トグル）
+    document.querySelectorAll('.api-card .rx').forEach(btn=>{
+      btn.addEventListener('click', async (e)=>{
+        const card = e.currentTarget.closest('.api-card');
+        const id   = card.dataset.id;
+        const type = e.currentTarget.dataset.type;
+        try{
+          await post(`/zanges/${id}/reactions`, { type, email:idState.email||undefined, nickname:idState.nickname||undefined });
+          const sum = await get(`/zanges/${id}/reactions`);
+          const map = {pray:'🙏',laugh:'😂',sympathy:'🤝',growth:'🌱'};
+          card.querySelectorAll('.rx').forEach(b=>{
+            const t=b.dataset.type, n=sum.summary?.[t]??0; b.innerHTML=`${map[t]} <b>${n}</b>`;
+          });
+        }catch(err){ alert('リアクション失敗: '+(err.message||'error')); }
+      });
+    });
+
+    // コメント開閉 & 読み込み
+    document.querySelectorAll('.api-card .show-comments').forEach(btn=>{
+      btn.addEventListener('click', async (e)=>{
+        const card = e.currentTarget.closest('.api-card');
+        const wrap = card.querySelector('.comments');
+        const list = wrap.querySelector('.list');
+        wrap.style.display = (wrap.style.display==='none'||!wrap.style.display) ? 'block' : 'none';
+        if (wrap.style.display==='block' && list.dataset.loaded!=='1'){
+          await loadComments(card.dataset.id, list);
+        }
+      });
+    });
+
+    // コメント投稿
+    document.querySelectorAll('.api-card .cform').forEach(form=>{
+      form.addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        const card = e.currentTarget.closest('.api-card');
+        const list = card.querySelector('.comments .list');
+        const input = form.querySelector('input[name="text"]');
+        const text = (input.value||'').trim(); if(!text) return;
+        try{
+          await post(`/zanges/${card.dataset.id}/comments`, {
+            text, name: idState.nickname||'匿名', email: idState.email||undefined, nickname: idState.nickname||undefined
+          });
+          input.value='';
+          await loadComments(card.dataset.id, list, true);
+          // コメント数を軽く更新
+          const feed = await get('/feed?limit=20');
+          const latest = feed.items.find(x=>String(x.id)===String(card.dataset.id));
+          if (latest) card.querySelector('.show-comments b').textContent = latest.comments_count||0;
+        }catch(err){ alert('コメント投稿失敗: '+(err.message||'error')); }
+      });
+    });
+  }
+
+  async function loadComments(postId, listEl, refresh=false){
+    if (!refresh && listEl.dataset.loaded==='1') return;
+    listEl.textContent = '読み込み中…';
+    const data = await get(`/zanges/${postId}/comments?limit=20`);
+    const items = data.items || [];
+    if (!items.length){ listEl.innerHTML = '<p>コメントはまだありません。</p>'; }
+    else{
+      listEl.innerHTML = items.map(c=>{
+        const who = c.user_nickname || c.name || '匿名';
+        const when = new Date(c.created_at).toLocaleString();
+        return `
+          <div style="border:1px solid #efefef;border-radius:8px;padding:8px;margin:6px 0;">
+            <div style="display:flex;gap:8px;align-items:center;">
+              <strong>${esc(who)}</strong>
+              <span style="margin-left:auto;color:#888;font-size:12px;">${when}</span>
+            </div>
+            <div style="white-space:pre-wrap;margin-top:6px;">${esc(c.text||'')}</div>
+            ${idState.email ? `<div style="text-align:right;margin-top:6px;"><button data-cid="${c.id}" class="cm-del">削除</button></div>` : ``}
+          </div>`;
+      }).join('');
+
+      // 本人削除（メールで本人照合する実装）
+      listEl.querySelectorAll('.cm-del').forEach(btn=>{
+        btn.addEventListener('click', async ()=>{
+          if(!confirm('このコメントを削除しますか？')) return;
+          const cid = btn.dataset.cid;
+          try{
+            await del(`/zanges/${postId}/comments/${cid}?email=${encodeURIComponent(idState.email||'')}`);
+            await loadComments(postId, listEl, true);
+          }catch(err){ alert('削除失敗: '+(err.message||'error')); }
+        });
+      });
+    }
+    listEl.dataset.loaded = '1';
+  }
+
+  // グローバルから呼べるよう一応エクスポート（任意）
+  window.zangeApiUI = { reload: loadFeed, setIdentity(email,nickname){
+    idState.email = (email||'').trim(); idState.nickname = (nickname||'').trim();
+    localStorage.setItem('zange_email', idState.email);
+    localStorage.setItem('zange_nickname', idState.nickname);
+    loadFeed();
+  }};
+})();
